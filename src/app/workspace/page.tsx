@@ -3,17 +3,17 @@
 import React, { useState, useEffect, useRef } from 'react';
 import JSZip from 'jszip';
 import Link from 'next/link';
-import { 
-  Bot, 
-  User, 
-  Send, 
-  Sparkles, 
-  FolderPlus, 
-  ChevronRight, 
-  Play, 
-  Cpu, 
-  Server, 
-  CheckCircle2, 
+import {
+  Bot,
+  User,
+  Send,
+  Sparkles,
+  FolderPlus,
+  ChevronRight,
+  Play,
+  Cpu,
+  Server,
+  CheckCircle2,
   AlertCircle,
   HelpCircle,
   Wrench,
@@ -32,15 +32,15 @@ import {
   Check,
   ExternalLink
 } from 'lucide-react';
-import { 
-  db, 
-  createNewChat, 
-  addMessageToChat, 
-  getChatMessages, 
-  getAllChats, 
+import {
+  db,
+  createNewChat,
+  addMessageToChat,
+  getChatMessages,
+  getAllChats,
   deleteChat,
-  type Chat, 
-  type Message 
+  type Chat,
+  type Message
 } from '../../services/db';
 
 // Lazy load Monaco editor dynamically on client
@@ -159,7 +159,7 @@ export default function WorkspacePage() {
 
     // Spawn AI Worker (must be type:module to support ES module imports in the worker)
     workerRef.current = new Worker('/ai-worker.js', { type: 'module' });
-    
+
     workerRef.current.onmessage = (event) => {
       const { status, message, progress, loaded, total, token, error, result } = event.data;
 
@@ -349,7 +349,7 @@ ${activeHtml}
 
     try {
       const zip = new JSZip();
-      
+
       // Place files inside a subfolder matching the project name
       const folder = zip.folder(slugName);
       if (folder) {
@@ -419,9 +419,9 @@ ${activeHtml}
       // Trigger Web Worker local generation
       setPipelinePass(3); // Start generation phase visual loading directly
       setPipelineStatus(prev => ({ ...prev, 1: 'success', 2: 'success', 3: 'running' }));
-      workerRef.current?.postMessage({ 
-        type: 'generate', 
-        data: { prompt: text } 
+      workerRef.current?.postMessage({
+        type: 'generate',
+        data: { prompt: text }
       });
     } else {
       // Trigger Next.js API Server generation (streams 5-pass SSE)
@@ -458,7 +458,7 @@ ${activeHtml}
 
     const decoder = new TextDecoder();
     let buffer = '';
-    
+
     // Track output variables dynamically
     let genHtml = '';
     let genCss = '';
@@ -489,7 +489,7 @@ ${activeHtml}
               setPipelineLogs(prev => ({ ...prev, [passNum]: event.message }));
             } else if (event.status === 'complete') {
               setPipelineStatus(prev => ({ ...prev, [passNum]: 'success' }));
-              
+
               if (passNum === 1) {
                 p1Data = JSON.stringify(event.data, null, 2);
                 setPipelineLogs(prev => ({ ...prev, 1: `App Name: ${event.data.app}\nFeatures: ${event.data.features.join(', ')}` }));
@@ -510,7 +510,7 @@ ${activeHtml}
               } else if (passNum === 5) {
                 p5Data = JSON.stringify(event.data, null, 2);
                 setPipelineLogs(prev => ({ ...prev, 5: `UX modifications and responsiveness updates applied.` }));
-                
+
                 // Final code updates
                 if (event.data.files) {
                   genHtml = event.data.files.html;
@@ -597,11 +597,11 @@ ${activeHtml}
     setActiveJs(js);
 
     setPipelineStatus(prev => ({ ...prev, 3: 'success', 4: 'success', 5: 'success' }));
-    setPipelineLogs(prev => ({ 
-      ...prev, 
-      3: 'Generated code from local model', 
-      4: 'Self-review checked local ONNX syntax', 
-      5: 'Applied local styles variables' 
+    setPipelineLogs(prev => ({
+      ...prev,
+      3: 'Generated code from local model',
+      4: 'Self-review checked local ONNX syntax',
+      5: 'Applied local styles variables'
     }));
 
     const assistantMessage: Omit<Message, 'id'> = {
@@ -621,7 +621,7 @@ ${activeHtml}
 
   return (
     <div className={`flex flex-col h-screen overflow-hidden ${themeMode === 'dark' ? 'bg-[#060a13] text-slate-100' : 'bg-slate-50 text-slate-900'}`}>
-      
+
       {/* Top Header bar */}
       <header className={`flex items-center justify-between px-6 py-3 border-b shrink-0 ${themeMode === 'dark' ? 'border-slate-800 bg-[#080d1a]' : 'border-slate-200 bg-white'}`}>
         <div className="flex items-center gap-3">
@@ -640,21 +640,19 @@ ${activeHtml}
           <div className={`flex items-center rounded-lg p-1 border text-xs font-semibold ${themeMode === 'dark' ? 'bg-slate-900/60 border-slate-800' : 'bg-slate-100 border-slate-200'}`}>
             <button
               onClick={() => setEngineMode('server')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-all ${
-                engineMode === 'server' 
-                  ? 'bg-indigo-600 text-white shadow-sm' 
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-all ${engineMode === 'server'
+                  ? 'bg-indigo-600 text-white shadow-sm'
                   : 'text-slate-400 hover:text-slate-200'
-              }`}
+                }`}
             >
               <Server size={12} /> Server Engine
             </button>
             <button
               onClick={() => setEngineMode('local')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-all ${
-                engineMode === 'local' 
-                  ? 'bg-indigo-600 text-white shadow-sm' 
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-all ${engineMode === 'local'
+                  ? 'bg-indigo-600 text-white shadow-sm'
                   : 'text-slate-400 hover:text-slate-200'
-              }`}
+                }`}
             >
               <Cpu size={12} /> Local AI (Offline)
             </button>
@@ -666,11 +664,10 @@ ${activeHtml}
               id="server-model-select"
               value={serverModel}
               onChange={(e) => setServerModel(e.target.value)}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-lg border focus:outline-none transition-all ${
-                themeMode === 'dark'
+              className={`px-3 py-1.5 text-xs font-semibold rounded-lg border focus:outline-none transition-all ${themeMode === 'dark'
                   ? 'bg-slate-900 border-slate-800 text-slate-200 focus:border-indigo-500'
                   : 'bg-white border-slate-200 text-slate-700 focus:border-indigo-500'
-              }`}
+                }`}
             >
               <optgroup label="Google Gemini API">
                 <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
@@ -691,11 +688,10 @@ ${activeHtml}
               id="local-model-select"
               value={localModel}
               onChange={handleLocalModelChange}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-lg border focus:outline-none transition-all ${
-                themeMode === 'dark'
+              className={`px-3 py-1.5 text-xs font-semibold rounded-lg border focus:outline-none transition-all ${themeMode === 'dark'
                   ? 'bg-slate-900 border-slate-800 text-slate-200 focus:border-indigo-500'
                   : 'bg-white border-slate-200 text-slate-700 focus:border-indigo-500'
-              }`}
+                }`}
             >
               <option value="Xenova/TinyLlama-1.1B-Chat-v1.0">TinyLlama 1.1B Chat (Best Quality ~650MB)</option>
               <option value="Xenova/Qwen1.5-0.5B-Chat">Qwen 1.5 0.5B Chat (~300MB)</option>
@@ -708,11 +704,10 @@ ${activeHtml}
             <button
               onClick={handleInitLocalModel}
               disabled={localModelStatus === 'ready' || localModelStatus === 'loading' || localModelStatus === 'progress'}
-              className={`flex items-center gap-2 px-3 py-1.5 border rounded-lg text-xs font-medium transition-all ${
-                localModelStatus === 'ready' ? 'bg-emerald-950/20 border-emerald-800/40 text-emerald-400' :
-                localModelStatus === 'loading' || localModelStatus === 'progress' ? 'bg-indigo-950/20 border-indigo-800/40 text-indigo-400 cursor-default' :
-                'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
-              }`}
+              className={`flex items-center gap-2 px-3 py-1.5 border rounded-lg text-xs font-medium transition-all ${localModelStatus === 'ready' ? 'bg-emerald-950/20 border-emerald-800/40 text-emerald-400' :
+                  localModelStatus === 'loading' || localModelStatus === 'progress' ? 'bg-indigo-950/20 border-indigo-800/40 text-indigo-400 cursor-default' :
+                    'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
+                }`}
             >
               {(localModelStatus === 'loading' || localModelStatus === 'progress') ? (
                 <Loader2 size={12} className="animate-spin" />
@@ -749,7 +744,7 @@ ${activeHtml}
           </button>
 
           {/* Export ZIP Button */}
-          <button 
+          <button
             onClick={handleDownloadApp}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white border border-transparent rounded-lg text-xs font-semibold shadow-md transition-all active:scale-95 cursor-pointer"
             title="Download project as a ZIP folder"
@@ -758,7 +753,7 @@ ${activeHtml}
           </button>
 
           {/* Dark / Light Toggle */}
-          <button 
+          <button
             onClick={handleToggleTheme}
             className={`p-2 border rounded-lg transition-all ${themeMode === 'dark' ? 'border-slate-800 hover:bg-slate-900/60' : 'border-slate-200 hover:bg-slate-100'}`}
           >
@@ -769,23 +764,16 @@ ${activeHtml}
 
       {/* Main Body */}
       <div className="flex flex-1 overflow-hidden">
-        
+
         {/* Left column: Sidebar & Chats & 5-Pass indicator */}
         <aside className={`w-[320px] border-r flex flex-col shrink-0 ${themeMode === 'dark' ? 'border-slate-800 bg-[#070b16]' : 'border-slate-200 bg-slate-50'}`}>
           {/* Create new chat session and demo buttons */}
           <div className="p-4 border-b border-slate-800/50 flex flex-col gap-2">
-            <button 
+            <button
               onClick={handleCreateNewChat}
               className="flex items-center justify-center gap-2 w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold shadow-md transition-all"
             >
               <FolderPlus size={13} /> New Session
-            </button>
-            <button 
-              onClick={() => handleSendPromptText('create a todo app')}
-              disabled={generationActive}
-              className="flex items-center justify-center gap-2 w-full py-2 bg-slate-900 border border-slate-800 hover:bg-slate-850 text-amber-400 hover:text-amber-300 rounded-lg text-xs font-semibold shadow-md transition-all disabled:opacity-50"
-            >
-              <Sparkles size={13} className="animate-pulse" /> Run Demo Case
             </button>
           </div>
 
@@ -796,20 +784,19 @@ ${activeHtml}
               <p className="text-xs text-slate-500 italic px-2">No active sessions.</p>
             ) : (
               chats.map((c) => (
-                <div 
-                  key={c.id} 
+                <div
+                  key={c.id}
                   onClick={() => handleSelectChat(c.id!)}
-                  className={`group flex items-center justify-between p-3 rounded-lg text-xs font-medium cursor-pointer transition-all ${
-                    currentChatId === c.id 
-                      ? 'bg-indigo-950/30 border border-indigo-800/40 text-indigo-300' 
+                  className={`group flex items-center justify-between p-3 rounded-lg text-xs font-medium cursor-pointer transition-all ${currentChatId === c.id
+                      ? 'bg-indigo-950/30 border border-indigo-800/40 text-indigo-300'
                       : 'border border-transparent text-slate-400 hover:bg-slate-900/40 hover:text-slate-200'
-                  }`}
+                    }`}
                 >
                   <div className="flex items-center gap-2 overflow-hidden mr-2">
                     <Sparkles size={12} className="shrink-0" />
                     <span className="truncate">{c.title}</span>
                   </div>
-                  <button 
+                  <button
                     onClick={(e) => handleDeleteSession(c.id!, e)}
                     className="opacity-0 group-hover:opacity-100 p-1 hover:bg-slate-900 hover:text-red-400 rounded transition-all"
                   >
@@ -825,7 +812,7 @@ ${activeHtml}
             <h3 className="text-xxs uppercase tracking-wider font-bold text-slate-500 mb-3 flex items-center gap-1.5">
               <Bot size={11} /> 5-Pass Visual Pipeline
             </h3>
-            
+
             <div className="flex flex-col gap-2">
               {[
                 { num: 1, label: 'Analyze Request' },
@@ -837,18 +824,16 @@ ${activeHtml}
                 <div key={pass.num} className="flex flex-col gap-1">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xxs font-bold ${
-                        pipelineStatus[pass.num] === 'success' ? 'bg-emerald-950 border border-emerald-500 text-emerald-400' :
-                        pipelineStatus[pass.num] === 'running' ? 'bg-indigo-950 border border-indigo-500 text-indigo-400 animate-pulse' :
-                        'bg-slate-900 border-slate-800 text-slate-500'
-                      }`}>
+                      <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xxs font-bold ${pipelineStatus[pass.num] === 'success' ? 'bg-emerald-950 border border-emerald-500 text-emerald-400' :
+                          pipelineStatus[pass.num] === 'running' ? 'bg-indigo-950 border border-indigo-500 text-indigo-400 animate-pulse' :
+                            'bg-slate-900 border-slate-800 text-slate-500'
+                        }`}>
                         {pass.num}
                       </span>
-                      <span className={`text-xxs font-semibold ${
-                        pipelineStatus[pass.num] === 'success' ? 'text-slate-200 font-bold' :
-                        pipelineStatus[pass.num] === 'running' ? 'text-indigo-400 font-bold' :
-                        'text-slate-500'
-                      }`}>
+                      <span className={`text-xxs font-semibold ${pipelineStatus[pass.num] === 'success' ? 'text-slate-200 font-bold' :
+                          pipelineStatus[pass.num] === 'running' ? 'text-indigo-400 font-bold' :
+                            'text-slate-500'
+                        }`}>
                         {pass.label}
                       </span>
                     </div>
@@ -872,12 +857,12 @@ ${activeHtml}
 
         {/* Center Panel (Code Editor or AI Tools Tab) & Right Panel (Live Preview) */}
         <main className="flex-1 flex flex-row overflow-hidden p-4 gap-4">
-          
+
           {/* Center Pane: Chat Log + Code Editor */}
           <div className="flex-1 flex flex-col gap-4 min-w-[350px]">
             {/* Content view */}
             <div className="flex-1 min-h-[300px]">
-              <CodeEditor 
+              <CodeEditor
                 html={activeHtml}
                 css={activeCss}
                 js={activeJs}
@@ -900,16 +885,14 @@ ${activeHtml}
                 ) : (
                   messages.map((m, idx) => (
                     <div key={idx} className={`flex gap-3 text-xs leading-relaxed max-w-[85%] ${m.role === 'user' ? 'self-end flex-row-reverse' : 'self-start'}`}>
-                      <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${
-                        m.role === 'user' ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-indigo-400 border border-slate-700'
-                      }`}>
+                      <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${m.role === 'user' ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-indigo-400 border border-slate-700'
+                        }`}>
                         {m.role === 'user' ? <User size={12} /> : <Bot size={12} />}
                       </div>
-                      <div className={`p-3 rounded-lg ${
-                        m.role === 'user' 
-                          ? 'bg-indigo-600 text-white font-medium' 
+                      <div className={`p-3 rounded-lg ${m.role === 'user'
+                          ? 'bg-indigo-600 text-white font-medium'
                           : themeMode === 'dark' ? 'bg-slate-900/60 border-slate-800 text-slate-200' : 'bg-slate-100 border-slate-200 text-slate-800'
-                      }`}>
+                        }`}>
                         {m.content}
                       </div>
                     </div>
@@ -920,8 +903,8 @@ ${activeHtml}
 
               {/* Chat Input row */}
               <div className={`p-3 border-t flex gap-2 shrink-0 ${themeMode === 'dark' ? 'border-slate-800 bg-slate-950/20' : 'border-slate-200 bg-slate-50/50'}`}>
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   value={promptInput}
                   onChange={(e) => setPromptInput(e.target.value)}
                   onKeyDown={(e) => {
@@ -931,7 +914,7 @@ ${activeHtml}
                   placeholder={generationActive ? 'Compiling 5-pass pipeline...' : 'e.g. Build an interactive CRM client system...'}
                   className="flex-1 px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-slate-100 text-xs focus:outline-none focus:border-indigo-500 disabled:opacity-50"
                 />
-                <button 
+                <button
                   onClick={handleSendPrompt}
                   disabled={generationActive || !promptInput.trim()}
                   className="flex items-center justify-center w-8 h-8 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-800 disabled:text-slate-500 text-white transition-all shrink-0"
@@ -948,7 +931,7 @@ ${activeHtml}
 
           {/* Right Panel: Live App Preview */}
           <div className="flex-1 min-w-[320px]">
-            <PreviewFrame 
+            <PreviewFrame
               html={activeHtml}
               css={activeCss}
               js={activeJs}
@@ -985,11 +968,10 @@ ${activeHtml}
                 <button
                   key={p}
                   onClick={() => { setApiKeyTab(p); setApiKeyInput(apiKeys[p] || ''); setShowApiKeyValue(false); setApiKeySaved(false); }}
-                  className={`flex-1 flex items-center justify-center gap-1.5 py-3 text-xs font-semibold border-b-2 transition-all ${
-                    apiKeyTab === p ? 'border-indigo-500 text-white' : 'border-transparent text-slate-500 hover:text-slate-300'
-                  }`}
+                  className={`flex-1 flex items-center justify-center gap-1.5 py-3 text-xs font-semibold border-b-2 transition-all ${apiKeyTab === p ? 'border-indigo-500 text-white' : 'border-transparent text-slate-500 hover:text-slate-300'
+                    }`}
                 >
-                  <span className={`w-1.5 h-1.5 rounded-full ${ apiKeys[p] ? 'bg-emerald-400' : 'bg-slate-600' }`}></span>
+                  <span className={`w-1.5 h-1.5 rounded-full ${apiKeys[p] ? 'bg-emerald-400' : 'bg-slate-600'}`}></span>
                   {{ gemini: 'Google Gemini', groq: 'Groq', openrouter: 'OpenRouter' }[p]}
                 </button>
               ))}
@@ -1028,9 +1010,8 @@ ${activeHtml}
                   </div>
                   <button
                     onClick={saveApiKey}
-                    className={`px-4 py-2.5 rounded-lg text-xs font-bold transition-all ${
-                      apiKeySaved ? 'bg-emerald-600/20 border border-emerald-500/30 text-emerald-400' : 'bg-indigo-600 hover:bg-indigo-700 text-white'
-                    }`}
+                    className={`px-4 py-2.5 rounded-lg text-xs font-bold transition-all ${apiKeySaved ? 'bg-emerald-600/20 border border-emerald-500/30 text-emerald-400' : 'bg-indigo-600 hover:bg-indigo-700 text-white'
+                      }`}
                   >
                     {apiKeySaved ? <><Check size={13} className="inline mr-1" />Saved!</> : 'Save'}
                   </button>
@@ -1052,7 +1033,7 @@ ${activeHtml}
                   <HelpCircle size={12} className="text-indigo-400" />
                   <span>How to get your {apiKeyTab === 'gemini' ? 'Google Gemini' : apiKeyTab === 'groq' ? 'Groq Cloud' : 'OpenRouter'} key</span>
                 </div>
-                
+
                 {apiKeyTab === 'gemini' && (
                   <div className="flex flex-col gap-1.5 text-[10px] text-slate-400 leading-normal">
                     <div className="flex items-start gap-1.5">
