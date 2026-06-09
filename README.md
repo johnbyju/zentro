@@ -233,6 +233,4 @@ Get free keys at:
 
 ---
 
-## 📄 License
 
-MIT — feel free to fork, extend, and build on top of Zentro.
