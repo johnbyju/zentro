@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
+import { parseModelLoadError, type ModelLoadErrorType } from '@/lib/modelLoadErrors';
 import Link from 'next/link';
 import { 
   Bot, 
@@ -98,15 +99,6 @@ const LOCAL_MODEL_LIBRARY: LocalModelInfo[] = [
     badge: '🪶 Lightest'
   },
   {
-    id: 'Felladrin/onnx-sheared-llama-160m-sft',
-    name: 'Sheared LLaMA 160M',
-    family: 'LLaMA',
-    category: 'tiny',
-    sizeMB: 200,
-    description: 'Super compact LLaMA model pruned via structured shearing. Very fast for its size.',
-    tags: ['LLaMA', 'Pruned', 'SFT'],
-  },
-  {
     id: 'Xenova/Qwen1.5-0.5B-Chat',
     name: 'Qwen 1.5 0.5B Chat',
     family: 'Qwen',
@@ -177,16 +169,6 @@ const LOCAL_MODEL_LIBRARY: LocalModelInfo[] = [
 
   // ── Medium (700MB–2GB) ────────────────────────────────────────────────────
   {
-    id: 'Xenova/phi-1_5',
-    name: 'Phi-1.5',
-    family: 'Phi',
-    category: 'medium',
-    sizeMB: 1500,
-    description: 'Microsoft Phi-1.5 — exceptional coding and reasoning at 1.3B params. Outpunches its weight class.',
-    tags: ['Microsoft', 'Code', 'Reasoning'],
-    badge: '💡 Best Coder'
-  },
-  {
     id: 'Xenova/Phi-3-mini-4k-instruct',
     name: 'Phi-3 Mini 4K',
     family: 'Phi',
@@ -197,23 +179,13 @@ const LOCAL_MODEL_LIBRARY: LocalModelInfo[] = [
     badge: '🏆 Top Quality'
   },
   {
-    id: 'Xenova/gemma-2b-it',
-    name: 'Gemma 2B IT',
-    family: 'Gemma',
-    category: 'medium',
-    sizeMB: 2100,
-    description: 'Google DeepMind Gemma 2B instruction-tuned. Great at following instructions and general tasks.',
-    tags: ['Google', 'Gemma', 'Instruction'],
-    badge: '🔮 Google'
-  },
-  {
-    id: 'Xenova/Qwen1.5-4B-Chat',
-    name: 'Qwen 1.5 4B Chat',
+    id: 'onnx-community/Qwen2.5-1.5B-Instruct',
+    name: 'Qwen 2.5 1.5B Instruct',
     family: 'Qwen',
     category: 'medium',
-    sizeMB: 2400,
-    description: 'Alibaba Qwen 1.5 4B — significantly smarter with strong multilingual and coding abilities.',
-    tags: ['Qwen', 'Chat', 'Multilingual'],
+    sizeMB: 1600,
+    description: 'Alibaba Qwen 2.5 1.5B — strong general chat model with excellent instruction following.',
+    tags: ['Qwen', 'Chat', 'Instruct'],
   },
   {
     id: 'Xenova/falcon-rw-1b',
@@ -225,16 +197,6 @@ const LOCAL_MODEL_LIBRARY: LocalModelInfo[] = [
     tags: ['TII', 'Falcon', 'Text Gen'],
   },
   {
-    id: 'Xenova/stablelm-zephyr-3b',
-    name: 'StableLM Zephyr 3B',
-    family: 'StableLM',
-    category: 'medium',
-    sizeMB: 1800,
-    description: 'Stability AI StableLM Zephyr 3B — instruction-tuned with DPO. Excellent chat quality.',
-    tags: ['StabilityAI', 'Chat', 'DPO'],
-    badge: '🌟 Excellent Chat'
-  },
-  {
     id: 'Xenova/flan-t5-base',
     name: 'Flan-T5 Base',
     family: 'T5',
@@ -244,25 +206,15 @@ const LOCAL_MODEL_LIBRARY: LocalModelInfo[] = [
     tags: ['Google', 'T5', 'Summarization'],
     badge: '📝 Summarizer'
   },
-  {
-    id: 'Xenova/flan-t5-large',
-    name: 'Flan-T5 Large',
-    family: 'T5',
-    category: 'medium',
-    sizeMB: 850,
-    description: 'Larger Flan-T5 model with improved reasoning. Great for complex instruction following tasks.',
-    tags: ['Google', 'T5', 'Reasoning'],
-  },
-
   // ── Large (2GB+) ──────────────────────────────────────────────────────────
   {
-    id: 'Xenova/Qwen1.5-7B-Chat',
-    name: 'Qwen 1.5 7B Chat',
-    family: 'Qwen',
+    id: 'Xenova/LLaMA-3.2-3B-Instruct',
+    name: 'LLaMA 3.2 3B Instruct',
+    family: 'LLaMA',
     category: 'large',
-    sizeMB: 4200,
-    description: 'Alibaba Qwen 1.5 7B — near-GPT-4 quality for many tasks. Requires 8GB+ RAM.',
-    tags: ['Qwen', '7B', 'High-Quality'],
+    sizeMB: 2000,
+    description: 'Meta LLaMA 3.2 3B — strongest available open model in this size. Best for complex tasks. Requires 6GB+ RAM.',
+    tags: ['Meta', 'LLaMA 3', 'SOTA'],
     badge: '💎 Premium'
   },
   {
@@ -275,39 +227,9 @@ const LOCAL_MODEL_LIBRARY: LocalModelInfo[] = [
     tags: ['Meta', 'LLaMA 3', 'Instruct'],
     badge: '🆕 Latest LLaMA'
   },
-  {
-    id: 'Xenova/LLaMA-3.2-3B-Instruct',
-    name: 'LLaMA 3.2 3B Instruct',
-    family: 'LLaMA',
-    category: 'medium',
-    sizeMB: 2000,
-    description: 'Meta LLaMA 3.2 3B — strong reasoning model. Best open-weight model in its size class.',
-    tags: ['Meta', 'LLaMA 3', 'SOTA'],
-    badge: '🔥 Most Capable'
-  },
-
   // ── New additions ────────────────────────────────────────────────────────
   {
-    id: 'Xenova/smollm2-360m-instruct',
-    name: 'SmolLM2 360M Instruct',
-    family: 'SmolLM',
-    category: 'tiny',
-    sizeMB: 376,
-    description: 'HuggingFace SmolLM2 360M — one of the best tiny instruct models. Extremely fast and efficient.',
-    tags: ['HuggingFace', 'Instruct', 'Tiny'],
-    badge: '⚡ Ultra Fast'
-  },
-  {
-    id: 'Xenova/smollm2-1.7b-instruct',
-    name: 'SmolLM2 1.7B Instruct',
-    family: 'SmolLM',
-    category: 'small',
-    sizeMB: 1000,
-    description: 'HuggingFace SmolLM2 1.7B — strong small model with excellent instruction following.',
-    tags: ['HuggingFace', 'Instruct', 'Efficient'],
-  },
-  {
-    id: 'Xenova/Qwen2.5-Coder-0.5B-Instruct',
+    id: 'onnx-community/Qwen2.5-Coder-0.5B-Instruct',
     name: 'Qwen2.5 Coder 0.5B',
     family: 'Qwen',
     category: 'tiny',
@@ -317,7 +239,7 @@ const LOCAL_MODEL_LIBRARY: LocalModelInfo[] = [
     badge: '💻 Coder'
   },
   {
-    id: 'Xenova/Qwen2.5-Coder-1.5B-Instruct',
+    id: 'onnx-community/Qwen2.5-Coder-1.5B-Instruct',
     name: 'Qwen2.5 Coder 1.5B',
     family: 'Qwen',
     category: 'small',
@@ -327,33 +249,14 @@ const LOCAL_MODEL_LIBRARY: LocalModelInfo[] = [
     badge: '💻 Best Coder Small'
   },
   {
-    id: 'Xenova/Qwen2.5-Coder-3B-Instruct',
+    id: 'onnx-community/Qwen2.5-Coder-3B-Instruct',
     name: 'Qwen2.5 Coder 3B',
     family: 'Qwen',
     category: 'medium',
     sizeMB: 2400,
     description: 'Alibaba Qwen2.5 Coder 3B — powerful code model with deep reasoning and multi-language support.',
     tags: ['Qwen', 'Code', 'Multi-language'],
-  },
-  {
-    id: 'Xenova/Qwen2.5-Coder-7B-Instruct',
-    name: 'Qwen2.5 Coder 7B',
-    family: 'Qwen',
-    category: 'large',
-    sizeMB: 5000,
-    description: 'Alibaba Qwen2.5 Coder 7B — flagship coding model. Near GPT-4 quality for code tasks.',
-    tags: ['Qwen', 'Code', '7B'],
     badge: '💎 Top Code Model'
-  },
-  {
-    id: 'Xenova/DeepSeek-R1-Distill-Qwen-7B',
-    name: 'DeepSeek R1 Distill 7B',
-    family: 'DeepSeek',
-    category: 'large',
-    sizeMB: 5000,
-    description: 'DeepSeek R1 distilled to Qwen 7B. Exceptional reasoning with chain-of-thought thinking. Very popular choice.',
-    tags: ['DeepSeek', 'Reasoning', 'R1'],
-    badge: '🧠 Best Reasoning'
   },
   {
     id: 'microsoft/Phi-3.5-mini-instruct',
@@ -364,26 +267,6 @@ const LOCAL_MODEL_LIBRARY: LocalModelInfo[] = [
     description: 'Microsoft Phi-3.5 Mini 3.8B — latest Phi model with improved multilingual support and reasoning.',
     tags: ['Microsoft', 'Phi-3.5', 'Instruct'],
     badge: '🆕 Latest Phi'
-  },
-  {
-    id: 'Xenova/Mistral-7B-Instruct-v0.3',
-    name: 'Mistral 7B v0.3',
-    family: 'Mistral',
-    category: 'large',
-    sizeMB: 4500,
-    description: 'Mistral AI 7B Instruct v0.3 — strong general-purpose model with excellent instruction following.',
-    tags: ['Mistral', '7B', 'Instruct'],
-    badge: '🌊 Mistral'
-  },
-  {
-    id: 'Xenova/Hermes-3-Llama-3.1-8B',
-    name: 'Hermes 3 (Llama 3.1 8B)',
-    family: 'LLaMA',
-    category: 'large',
-    sizeMB: 4800,
-    description: 'NousResearch Hermes 3 fine-tuned on LLaMA 3.1 8B. Top-tier conversational quality and roleplay.',
-    tags: ['NousResearch', 'LLaMA 3', 'Chat'],
-    badge: '🔮 Top Chat'
   },
 ];
 
@@ -476,11 +359,12 @@ export default function AssistantPage() {
 
   // API Key Settings Modal
   const [showApiModal, setShowApiModal] = useState(false);
-  const [apiKeyTab, setApiKeyTab] = useState<'gemini' | 'groq' | 'openrouter'>('gemini');
+  const [apiKeyTab, setApiKeyTab] = useState<'gemini' | 'groq' | 'openrouter' | 'huggingface'>('gemini');
   const [apiKeyInput, setApiKeyInput] = useState('');
   const [showApiKeyValue, setShowApiKeyValue] = useState(false);
   const [apiKeys, setApiKeys] = useState<Record<string, string>>({});
   const [apiKeySaved, setApiKeySaved] = useState(false);
+  const [serverHfConfigured, setServerHfConfigured] = useState(false);
 
   // Model Library Modal
   const [showModelLibrary, setShowModelLibrary] = useState(false);
@@ -496,6 +380,19 @@ export default function AssistantPage() {
   useEffect(() => {
     loadChatSessions();
     loadApiKeys();
+
+    const fetchHfConfig = async () => {
+      try {
+        const res = await fetch('/api/config/huggingface');
+        const data = await res.json();
+        if (data.configured) {
+          setServerHfConfigured(true);
+        }
+      } catch (err) {
+        console.error('Failed to load Hugging Face config from server:', err);
+      }
+    };
+    fetchHfConfig();
 
     const savedMemories = localStorage.getItem('zentro-memories');
     if (savedMemories) setMemories(JSON.parse(savedMemories));
@@ -513,7 +410,7 @@ export default function AssistantPage() {
     workerRef.current = new Worker('/ai-worker.js', { type: 'module' });
     
     workerRef.current.onmessage = (event) => {
-      const { status, message, progress, token, error, result } = event.data;
+      const { status, message, progress, token, error, result, errorType } = event.data;
 
       if (status === 'loading') {
         setLocalModelStatus('loading');
@@ -530,8 +427,17 @@ export default function AssistantPage() {
         handleLocalModelCompletion(result, pendingChatIdRef.current);
       } else if (status === 'error') {
         setLocalModelStatus('error');
-        setLocalModelMsg('Local AI Error: ' + error);
+        const info = parseModelLoadError(error || '', errorType as ModelLoadErrorType | undefined);
+        setLocalModelMsg(info.message);
         setGenerationActive(false);
+        setErrorPopup({ visible: true, message: info.message, reason: info.reason });
+        if (errorDismissRef.current) clearTimeout(errorDismissRef.current);
+        errorDismissRef.current = setTimeout(() => {
+          setErrorPopup({ visible: false, message: '' });
+        }, 10000);
+        if (info.suggestModelLibrary) {
+          setShowModelLibrary(true);
+        }
       }
     };
 
@@ -655,7 +561,16 @@ export default function AssistantPage() {
     setLocalModelMsg('Preparing model download...');
     setLocalModelPercent(0);
     setEngineMode('local');
-    workerRef.current?.postMessage({ type: 'load', data: { model: modelId } });
+    const userHfToken = apiKeys['huggingface'] || '';
+    workerRef.current?.postMessage({
+      type: 'load',
+      data: {
+        model: modelId,
+        useHfProxy: true,
+        token: userHfToken,
+        origin: window.location.origin,
+      },
+    });
   };
 
   const handleInitCurrentModel = () => {
@@ -667,14 +582,23 @@ export default function AssistantPage() {
     setLocalModelStatus('loading');
     setLocalModelMsg('Preparing model...');
     setLocalModelPercent(0);
-    workerRef.current?.postMessage({ type: 'load', data: { model: localModelId } });
+    const userHfToken = apiKeys['huggingface'] || '';
+    workerRef.current?.postMessage({
+      type: 'load',
+      data: {
+        model: localModelId,
+        useHfProxy: true,
+        token: userHfToken,
+        origin: window.location.origin,
+      },
+    });
   };
 
   // ─── API Keys ─────────────────────────────────────────────────────────────
 
   const loadApiKeys = () => {
     const stored: Record<string, string> = {};
-    ['gemini', 'groq', 'openrouter'].forEach(p => {
+    ['gemini', 'groq', 'openrouter', 'huggingface'].forEach(p => {
       const k = localStorage.getItem(`zentro-key-${p}`);
       if (k) stored[p] = k;
     });
@@ -1629,7 +1553,7 @@ export default function AssistantPage() {
             </div>
 
             <div className="flex border-b border-white/[0.06]">
-              {(['gemini', 'groq', 'openrouter'] as const).map(p => (
+              {(['gemini', 'groq', 'openrouter', 'huggingface'] as const).map(p => (
                 <button
                   key={p}
                   onClick={() => { setApiKeyTab(p); setApiKeyInput(apiKeys[p] || ''); setShowApiKeyValue(false); setApiKeySaved(false); }}
@@ -1640,7 +1564,7 @@ export default function AssistantPage() {
                   }`}
                 >
                   <span className={`w-1.5 h-1.5 rounded-full ${ apiKeys[p] ? 'bg-emerald-400' : 'bg-slate-600' }`}></span>
-                  {{ gemini: 'Google Gemini', groq: 'Groq', openrouter: 'OpenRouter' }[p]}
+                  {{ gemini: 'Google Gemini', groq: 'Groq', openrouter: 'OpenRouter', huggingface: 'Hugging Face' }[p]}
                 </button>
               ))}
             </div>
@@ -1648,11 +1572,13 @@ export default function AssistantPage() {
             <div className="p-5 flex flex-col gap-4">
               <div className="rounded-xl bg-[#070914] border border-white/[0.04] px-4 py-3 flex items-center justify-between">
                 <div>
-                  <p className="text-xs font-bold text-white">{{ gemini: 'Google Gemini API', groq: 'Groq Cloud API', openrouter: 'OpenRouter API' }[apiKeyTab]}</p>
-                  <p className="text-[10px] text-slate-500 mt-0.5">{{ gemini: 'Free tier available · aistudio.google.com', groq: 'Free tier available · console.groq.com', openrouter: 'Free models available · openrouter.ai/keys' }[apiKeyTab]}</p>
+                  <p className="text-xs font-bold text-white">{{ gemini: 'Google Gemini API', groq: 'Groq Cloud API', openrouter: 'OpenRouter API', huggingface: 'Hugging Face Token' }[apiKeyTab]}</p>
+                  <p className="text-[10px] text-slate-500 mt-0.5">{{ gemini: 'Free tier available · aistudio.google.com', groq: 'Free tier available · console.groq.com', openrouter: 'Free models available · openrouter.ai/keys', huggingface: 'Required for gated/private models · huggingface.co/settings/tokens' }[apiKeyTab]}</p>
                 </div>
                 {apiKeys[apiKeyTab] ? (
                   <span className="text-[9px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-1 rounded-full">✓ ACTIVE</span>
+                ) : apiKeyTab === 'huggingface' && serverHfConfigured ? (
+                  <span className="text-[9px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-1 rounded-full">✓ SERVER DEFAULT</span>
                 ) : (
                   <span className="text-[9px] font-bold text-slate-500 bg-white/[0.03] border border-white/[0.06] px-2 py-1 rounded-full">NOT SET</span>
                 )}
@@ -1666,7 +1592,7 @@ export default function AssistantPage() {
                       type={showApiKeyValue ? 'text' : 'password'}
                       value={apiKeyInput}
                       onChange={e => setApiKeyInput(e.target.value)}
-                      placeholder={{ gemini: 'AIza...', groq: 'gsk_...', openrouter: 'sk-or-...' }[apiKeyTab]}
+                      placeholder={{ gemini: 'AIza...', groq: 'gsk_...', openrouter: 'sk-or-...', huggingface: 'hf_...' }[apiKeyTab]}
                       className="w-full px-3 pr-9 py-2.5 rounded-lg bg-[#070914] border border-white/[0.06] text-xs text-slate-200 font-mono placeholder:text-slate-600 focus:outline-none focus:border-[#3D5CFF]/50 transition-colors"
                     />
                     <button
@@ -1704,7 +1630,7 @@ export default function AssistantPage() {
               <div className="bg-slate-950/60 border border-white/[0.04] p-3 rounded-xl flex flex-col gap-2">
                 <div className="flex items-center gap-1.5 text-[9.5px] font-bold text-slate-400 uppercase tracking-wider">
                   <HelpCircle size={12} className="text-indigo-400" />
-                  How to get your {apiKeyTab === 'gemini' ? 'Google Gemini' : apiKeyTab === 'groq' ? 'Groq Cloud' : 'OpenRouter'} key
+                  How to get your {apiKeyTab === 'gemini' ? 'Google Gemini' : apiKeyTab === 'groq' ? 'Groq Cloud' : apiKeyTab === 'openrouter' ? 'OpenRouter' : 'Hugging Face'} key
                 </div>
                 {apiKeyTab === 'gemini' && (
                   <div className="flex flex-col gap-1.5 text-[10px] text-slate-400 leading-normal">
@@ -1723,6 +1649,13 @@ export default function AssistantPage() {
                   <div className="flex flex-col gap-1.5 text-[10px] text-slate-400 leading-normal">
                     <div className="flex items-start gap-1.5"><span className="w-3.5 h-3.5 rounded-full bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-[8px] font-bold text-indigo-400 shrink-0 mt-0.5">1</span><p>Visit <a href="https://openrouter.ai" target="_blank" rel="noopener noreferrer" className="text-indigo-400 hover:text-indigo-300 underline inline-flex items-center gap-0.5">OpenRouter.ai <ExternalLink size={8} /></a> and sign up.</p></div>
                     <div className="flex items-start gap-1.5"><span className="w-3.5 h-3.5 rounded-full bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-[8px] font-bold text-indigo-400 shrink-0 mt-0.5">2</span><p>Go to Keys → Create key (<code className="font-mono text-indigo-300">sk-or-</code>). Free models need no credits!</p></div>
+                  </div>
+                )}
+                {apiKeyTab === 'huggingface' && (
+                  <div className="flex flex-col gap-1.5 text-[10px] text-slate-400 leading-normal">
+                    <div className="flex items-start gap-1.5"><span className="w-3.5 h-3.5 rounded-full bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-[8px] font-bold text-indigo-400 shrink-0 mt-0.5">1</span><p>Go to <a href="https://huggingface.co/settings/tokens" target="_blank" rel="noopener noreferrer" className="text-indigo-400 hover:text-indigo-300 underline inline-flex items-center gap-0.5">Hugging Face Access Tokens <ExternalLink size={8} /></a>.</p></div>
+                    <div className="flex items-start gap-1.5"><span className="w-3.5 h-3.5 rounded-full bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-[8px] font-bold text-indigo-400 shrink-0 mt-0.5">2</span><p>Create a token with <strong className="text-slate-350">"Read"</strong> access role.</p></div>
+                    <div className="flex items-start gap-1.5"><span className="w-3.5 h-3.5 rounded-full bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-[8px] font-bold text-indigo-400 shrink-0 mt-0.5">3</span><p>Copy the token (starts with <code className="font-mono text-indigo-300">hf_</code>) and paste it here.</p></div>
                   </div>
                 )}
               </div>
@@ -1747,7 +1680,9 @@ export default function AssistantPage() {
                 </div>
                 <div>
                   <p className="text-xs font-bold text-white leading-none">{errorPopup.message}</p>
-                  <p className="text-[10px] text-red-400 font-semibold mt-0.5 tracking-wide">ERROR</p>
+                  <p className="text-[10px] text-red-400 font-semibold mt-0.5 tracking-wide">
+                    {errorPopup.message === 'Model not available' ? 'MODEL UNAVAILABLE' : 'ERROR'}
+                  </p>
                 </div>
               </div>
               <button onClick={dismissError} className="p-1 rounded-md hover:bg-white/[0.04] text-slate-500 hover:text-white transition-colors shrink-0">
@@ -1762,7 +1697,11 @@ export default function AssistantPage() {
             <div className="flex items-center gap-2 pt-0.5">
               <RefreshCcw size={11} className="text-[#3D5CFF] shrink-0" />
               <p className="text-[10px] text-slate-500 leading-snug">
-                Switch the model from the <span className="text-[#6DD3FF] font-semibold">top controls</span> to try again.
+                {errorPopup.message === 'Model not available' ? (
+                  <>Pick another model from the <span className="text-[#6DD3FF] font-semibold">Model Library</span> — it should open automatically.</>
+                ) : (
+                  <>Switch the model from the <span className="text-[#6DD3FF] font-semibold">top controls</span> to try again.</>
+                )}
               </p>
             </div>
           </div>

@@ -12,6 +12,48 @@ env.backends.onnx.wasm.numThreads = 1;
 let generator = null;
 let currentModelName = '';
 let isLoading = false;
+let hfFetchPatched = false;
+
+const DEFAULT_REMOTE_HOST = 'https://huggingface.co/';
+
+function getProxyBase(origin) {
+  const base = origin || (typeof self.location !== 'undefined' ? self.location.origin : '');
+  return `${base}/api/huggingface/`;
+}
+
+function configureHfAccess({ useProxy, userToken, origin }) {
+  // Default to proxy — server injects .env token; works for public models too
+  if (useProxy !== false) {
+    env.remoteHost = getProxyBase(origin);
+    if (userToken && !hfFetchPatched) {
+      const nativeFetch = globalThis.fetch.bind(globalThis);
+      const proxyPrefix = getProxyBase(origin);
+      globalThis.fetch = (input, init) => {
+        const url = String(input);
+        if (url.startsWith(proxyPrefix) || url.includes('/api/huggingface/')) {
+          const headers = new Headers(init?.headers);
+          headers.set('X-HF-Token', userToken);
+          return nativeFetch(input, { ...init, headers });
+        }
+        return nativeFetch(input, init);
+      };
+      hfFetchPatched = true;
+    }
+  } else {
+    env.remoteHost = DEFAULT_REMOTE_HOST;
+  }
+}
+
+async function verifyProxyReachable(origin) {
+  const base = getProxyBase(origin);
+  const probe = `${base}Xenova/gpt2/resolve/main/config.json`;
+  try {
+    const res = await fetch(probe);
+    return res.ok || res.status === 404 || res.status === 401 || res.status === 403;
+  } catch {
+    return false;
+  }
+}
 
 // ── Chat-template fallback ─────────────────────────────────────────────────
 // Converts message array → plain string for models without a chat template
@@ -59,6 +101,23 @@ self.addEventListener('message', async (event) => {
     if (isLoading) return;
 
     const modelName = (data && data.model) ? data.model : 'Xenova/TinyLlama-1.1B-Chat-v1.0';
+    const userToken = (data && data.token) ? data.token : '';
+    const useHfProxy = data?.useHfProxy !== false;
+    const origin = (data && data.origin) ? data.origin : '';
+
+    configureHfAccess({ useProxy: useHfProxy, userToken, origin });
+
+    if (useHfProxy) {
+      const reachable = await verifyProxyReachable(origin);
+      if (!reachable) {
+        self.postMessage({
+          status: 'error',
+          error: 'Cannot reach the Hugging Face proxy. Make sure the dev server is running (`npm run dev`) and you are online for the first download.',
+          errorType: 'network',
+        });
+        return;
+      }
+    }
 
     if (generator && currentModelName === modelName) {
       self.postMessage({ status: 'ready', message: 'Local AI ready (cached)!' });
@@ -107,7 +166,16 @@ self.addEventListener('message', async (event) => {
     } catch (err) {
       isLoading = false;
       generator = null;
-      self.postMessage({ status: 'error', error: `Load failed: ${err?.message || String(err)}` });
+      const msg = err?.message || String(err);
+      let errorType = 'unknown';
+      if (msg.includes('Unauthorized') || msg.includes('401')) {
+        errorType = 'auth';
+      } else if (msg.includes('Could not locate file') || msg.includes('404') || msg.includes('invalid model ID')) {
+        errorType = 'unavailable';
+      } else if (msg.includes('Forbidden') || msg.includes('403')) {
+        errorType = 'forbidden';
+      }
+      self.postMessage({ status: 'error', error: msg, errorType });
     }
   }
 
@@ -274,7 +342,8 @@ self.addEventListener('message', async (event) => {
   // ── TRANSCRIBE (whisper) ───────────────────────────────────────────────────
   if (type === 'transcribe') {
     try {
-      const { audioData } = data;
+      const { audioData, token, useHfProxy, origin } = data;
+      configureHfAccess({ useProxy: useHfProxy !== false, userToken: token || '', origin: origin || '' });
       self.postMessage({ status: 'loading', message: 'Initializing Whisper transcription...' });
 
       const progressCallback = (info) => {

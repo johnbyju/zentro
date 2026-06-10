@@ -76,7 +76,10 @@ Create a `.env` file in the project root:
 GEMINI_API_KEY=AIza...
 GROQ_API_KEY=gsk_...
 OPENROUTE_API_KEY=sk-or-...
+HUGGING_FACE_TOKEN=hf_...
 ```
+
+`HUGGING_FACE_TOKEN` is required for gated models (Phi, LLaMA, etc.). Model downloads are proxied through Next.js (`/api/huggingface/`) so the token stays server-side and is never exposed to the browser.
 
 ### Option 2 — Bring Your Own Key (per-user, in-browser)
 Click the **🔑 API Keys** button in the top header of the Workspace or Assistant page.
@@ -92,6 +95,7 @@ Click the **🔑 API Keys** button in the top header of the Workspace or Assista
 | Google Gemini | `AIza...` |
 | Groq | `gsk_...` |
 | OpenRouter | `sk-or-...` |
+| Hugging Face | `hf_...` |
 
 ---
 

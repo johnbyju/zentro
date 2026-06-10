@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
+import { parseModelLoadError, type ModelLoadErrorType } from '@/lib/modelLoadErrors';
 import JSZip from 'jszip';
 import Link from 'next/link';
 import {
@@ -89,16 +90,17 @@ export default function WorkspacePage() {
   // API Key Settings Modal
   const [showApiModal, setShowApiModal] = useState(false);
   const [showLocalModelOnboarding, setShowLocalModelOnboarding] = useState(false);
-  const [apiKeyTab, setApiKeyTab] = useState<'gemini' | 'groq' | 'openrouter'>('gemini');
+  const [apiKeyTab, setApiKeyTab] = useState<'gemini' | 'groq' | 'openrouter' | 'huggingface'>('gemini');
   const [apiKeyInput, setApiKeyInput] = useState('');
   const [showApiKeyValue, setShowApiKeyValue] = useState(false);
   const [apiKeys, setApiKeys] = useState<Record<string, string>>({});
   const [apiKeySaved, setApiKeySaved] = useState(false);
+  const [serverHfConfigured, setServerHfConfigured] = useState(false);
 
   // ─── API Key Helpers ───
   const loadApiKeys = () => {
     const stored: Record<string, string> = {};
-    ['gemini', 'groq', 'openrouter'].forEach(p => {
+    ['gemini', 'groq', 'openrouter', 'huggingface'].forEach(p => {
       const k = localStorage.getItem(`zentro-key-${p}`);
       if (k) stored[p] = k;
     });
@@ -144,6 +146,19 @@ export default function WorkspacePage() {
     loadChatSessions();
     loadApiKeys();
 
+    const fetchHfConfig = async () => {
+      try {
+        const res = await fetch('/api/config/huggingface');
+        const data = await res.json();
+        if (data.configured) {
+          setServerHfConfigured(true);
+        }
+      } catch (err) {
+        console.error('Failed to load Hugging Face config from server:', err);
+      }
+    };
+    fetchHfConfig();
+
     // Check localStorage theme settings
     const savedTheme = localStorage.getItem('zentro-theme') as 'dark' | 'light';
     if (savedTheme) {
@@ -162,7 +177,7 @@ export default function WorkspacePage() {
     workerRef.current = new Worker('/ai-worker.js', { type: 'module' });
 
     workerRef.current.onmessage = (event) => {
-      const { status, message, progress, loaded, total, token, error, result, pass, data } = event.data;
+      const { status, message, progress, loaded, total, token, error, result, pass, data, errorType } = event.data;
 
       if (status === 'loading') {
         setLocalModelStatus('loading');
@@ -208,8 +223,10 @@ export default function WorkspacePage() {
         handleLocalModelCompletion(result, pendingChatIdRef.current);
       } else if (status === 'error') {
         setLocalModelStatus('error');
-        setLocalModelMsg('Local AI Error: ' + error);
+        const info = parseModelLoadError(error || '', errorType as ModelLoadErrorType | undefined);
+        setLocalModelMsg(info.message);
         setGenerationActive(false);
+        showError(info.message, info.reason);
       }
     };
 
@@ -295,7 +312,16 @@ export default function WorkspacePage() {
   // Launch Local Model weight downloader
   const handleInitLocalModel = () => {
     if (localModelStatus === 'ready' || localModelStatus === 'loading' || localModelStatus === 'progress') return;
-    workerRef.current?.postMessage({ type: 'load', data: { model: localModel } });
+    const userHfToken = apiKeys['huggingface'] || '';
+    workerRef.current?.postMessage({
+      type: 'load',
+      data: {
+        model: localModel,
+        useHfProxy: true,
+        token: userHfToken,
+        origin: window.location.origin,
+      },
+    });
   };
 
   // Monaco code editing sync with local IndexedDB autosave
@@ -734,9 +760,8 @@ ${activeHtml}
               <option value="Xenova/Qwen1.5-1.8B-Chat">Qwen 1.5 1.8B Chat (~1.1GB)</option>
               <option value="Xenova/Qwen1.5-0.5B-Chat">Qwen 1.5 0.5B Chat (~300MB)</option>
               <option value="Xenova/Phi-3-mini-4k-instruct">Phi-3 Mini 4K 🏆 (~2.3GB)</option>
-              <option value="Xenova/phi-1_5">Phi-1.5 💡 (~1.5GB)</option>
-              <option value="Xenova/stablelm-zephyr-3b">StableLM Zephyr 3B 🌟 (~1.8GB)</option>
-              <option value="Xenova/gemma-2b-it">Gemma 2B IT 🔮 (~2.1GB)</option>
+              <option value="onnx-community/Qwen2.5-Coder-1.5B-Instruct">Qwen2.5 Coder 1.5B 💻 (~1.6GB)</option>
+              <option value="onnx-community/Qwen2.5-Coder-3B-Instruct">Qwen2.5 Coder 3B 💎 (~2.4GB)</option>
               <option value="Xenova/bloom-560m">BLOOM 560M 🌍 (~560MB)</option>
               <option value="Xenova/LaMini-GPT-124M">LaMini GPT 124M ⚡ Fastest (~250MB)</option>
             </select>
@@ -1007,7 +1032,7 @@ ${activeHtml}
 
             {/* Provider tabs */}
             <div className="flex border-b border-white/[0.06]">
-              {(['gemini', 'groq', 'openrouter'] as const).map(p => (
+              {(['gemini', 'groq', 'openrouter', 'huggingface'] as const).map(p => (
                 <button
                   key={p}
                   onClick={() => { setApiKeyTab(p); setApiKeyInput(apiKeys[p] || ''); setShowApiKeyValue(false); setApiKeySaved(false); }}
@@ -1015,7 +1040,7 @@ ${activeHtml}
                     }`}
                 >
                   <span className={`w-1.5 h-1.5 rounded-full ${apiKeys[p] ? 'bg-emerald-400' : 'bg-slate-600'}`}></span>
-                  {{ gemini: 'Google Gemini', groq: 'Groq', openrouter: 'OpenRouter' }[p]}
+                  {{ gemini: 'Google Gemini', groq: 'Groq', openrouter: 'OpenRouter', huggingface: 'Hugging Face' }[p]}
                 </button>
               ))}
             </div>
@@ -1025,13 +1050,15 @@ ${activeHtml}
               {/* Provider info row */}
               <div className="rounded-xl bg-[#070914] border border-white/[0.04] px-4 py-3 flex items-center justify-between">
                 <div>
-                  <p className="text-xs font-bold text-white">{{ gemini: 'Google Gemini API', groq: 'Groq Cloud API', openrouter: 'OpenRouter API' }[apiKeyTab]}</p>
-                  <p className="text-[10px] text-slate-500 mt-0.5">{{ gemini: 'Free tier · aistudio.google.com', groq: 'Free tier · console.groq.com', openrouter: 'Free models · openrouter.ai/keys' }[apiKeyTab]}</p>
+                  <p className="text-xs font-bold text-white">{{ gemini: 'Google Gemini API', groq: 'Groq Cloud API', openrouter: 'OpenRouter API', huggingface: 'Hugging Face Token' }[apiKeyTab]}</p>
+                  <p className="text-[10px] text-slate-500 mt-0.5">{{ gemini: 'Free tier · aistudio.google.com', groq: 'Free tier · console.groq.com', openrouter: 'Free models · openrouter.ai/keys', huggingface: 'Required for gated/private models · huggingface.co/settings/tokens' }[apiKeyTab]}</p>
                 </div>
                 {apiKeys[apiKeyTab] ? (
                   <span className="text-[9px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-1 rounded-full">✓ ACTIVE</span>
+                ) : apiKeyTab === 'huggingface' && serverHfConfigured ? (
+                  <span className="text-[9px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-1 rounded-full">✓ SERVER DEFAULT</span>
                 ) : (
-                  <span className="text-[9px] font-bold text-slate-500 bg-white/[0.03] border border-white/[0.06] px-2 py-1 rounded-full">SERVER DEFAULT</span>
+                  <span className="text-[9px] font-bold text-slate-500 bg-white/[0.03] border border-white/[0.06] px-2 py-1 rounded-full">NOT SET</span>
                 )}
               </div>
 
@@ -1044,7 +1071,7 @@ ${activeHtml}
                       type={showApiKeyValue ? 'text' : 'password'}
                       value={apiKeyInput}
                       onChange={e => setApiKeyInput(e.target.value)}
-                      placeholder={{ gemini: 'AIza...', groq: 'gsk_...', openrouter: 'sk-or-...' }[apiKeyTab]}
+                      placeholder={{ gemini: 'AIza...', groq: 'gsk_...', openrouter: 'sk-or-...', huggingface: 'hf_...' }[apiKeyTab]}
                       className="w-full px-3 pr-9 py-2.5 rounded-lg bg-[#070914] border border-white/[0.06] text-xs text-slate-200 font-mono placeholder:text-slate-600 focus:outline-none focus:border-indigo-500/50 transition-colors"
                     />
                     <button onClick={() => setShowApiKeyValue(v => !v)} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-600 hover:text-slate-300 transition-colors">
@@ -1239,7 +1266,9 @@ ${activeHtml}
                 </div>
                 <div>
                   <p className="text-xs font-bold text-white leading-none">{errorPopup.message}</p>
-                  <p className="text-[10px] text-red-400 font-semibold mt-0.5 tracking-wide">API QUOTA / RATE LIMIT</p>
+                  <p className="text-[10px] text-red-400 font-semibold mt-0.5 tracking-wide">
+                    {errorPopup.message === 'Model not available' ? 'MODEL UNAVAILABLE' : 'API QUOTA / RATE LIMIT'}
+                  </p>
                 </div>
               </div>
               <button
@@ -1261,7 +1290,11 @@ ${activeHtml}
             <div className="flex items-center gap-2 pt-0.5">
               <RefreshCcw size={11} className="text-[#3D5CFF] shrink-0" />
               <p className="text-[10px] text-slate-500 leading-snug">
-                Switch the model from the <span className="text-[#6DD3FF] font-semibold">top dropdown</span> to Groq or OpenRouter and try again.
+                {errorPopup.message === 'Model not available' ? (
+                  <>Choose a different model from the <span className="text-[#6DD3FF] font-semibold">local model dropdown</span> at the top.</>
+                ) : (
+                  <>Switch the model from the <span className="text-[#6DD3FF] font-semibold">top dropdown</span> to Groq or OpenRouter and try again.</>
+                )}
               </p>
             </div>
           </div>
