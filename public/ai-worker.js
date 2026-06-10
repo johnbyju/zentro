@@ -269,6 +269,8 @@ self.addEventListener('message', async (event) => {
     } catch (err) {
       self.postMessage({ status: 'error', error: `Chat failed: ${err?.message || String(err)}` });
     }
+  }
+
   // ── TRANSCRIBE (whisper) ───────────────────────────────────────────────────
   if (type === 'transcribe') {
     try {
