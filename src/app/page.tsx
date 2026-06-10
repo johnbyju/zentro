@@ -76,15 +76,19 @@ export default function LandingPage() {
         </div>
 
         {/* Headline */}
-        <h2 className="text-4xl sm:text-6xl lg:text-7xl font-extrabold tracking-tight text-white max-w-5xl leading-[1.08] mb-8">
-          The Future of AI Code-Building <br />
+        <h2 className="text-6xl sm:text-8xl lg:text-9xl font-extrabold tracking-tight text-white max-w-5xl leading-none mb-6">
           <span className="bg-gradient-to-r from-[#3D5CFF] via-[#6DD3FF] to-[#a5f3fc] bg-clip-text text-transparent">
-            Executes Inside Your Browser
+            Zentro
           </span>
         </h2>
 
+        {/* Secondary Headline */}
+        <h3 className="text-xl sm:text-2xl lg:text-3xl font-bold tracking-tight text-slate-200 max-w-3xl leading-snug mb-8">
+          The Future of AI Code-Building. Executes Inside Your Browser.
+        </h3>
+
         {/* Subtitle */}
-        <p className="text-slate-400 text-base sm:text-lg max-w-2xl leading-relaxed mb-12">
+        <p className="text-slate-400 text-sm sm:text-base max-w-xl leading-relaxed mb-12">
           Compile and run full-stack web applications locally with WebGPU LLMs. Zero server requirements, complete data privacy, and a preloaded suite of developer utilities.
         </p>
 
