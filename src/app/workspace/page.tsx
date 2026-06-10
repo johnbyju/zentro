@@ -55,7 +55,7 @@ export default function WorkspacePage() {
   const [themeMode, setThemeMode] = useState<'dark' | 'light'>('dark');
 
   // Generator engine state
-  const [engineMode, setEngineMode] = useState<'server' | 'local'>('server');
+  const [engineMode, setEngineMode] = useState<'server' | 'local'>('local');
   const [generationActive, setGenerationActive] = useState(false);
   const [serverModel, setServerModel] = useState('gemini-2.5-flash');
   const [localModel, setLocalModel] = useState('Xenova/TinyLlama-1.1B-Chat-v1.0');
@@ -693,16 +693,29 @@ ${activeHtml}
             >
               <optgroup label="Google Gemini API">
                 <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+                <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
                 <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
                 <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash Lite</option>
+                <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
+                <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
               </optgroup>
               <optgroup label="Groq Cloud API">
                 <option value="groq/llama-3.3-70b-versatile">Llama 3.3 70B (Groq)</option>
                 <option value="groq/llama-3.1-70b-versatile">Llama 3.1 70B (Groq)</option>
+                <option value="groq/llama-3.1-8b-instant">Llama 3.1 8B Instant (Groq)</option>
+                <option value="groq/mixtral-8x7b-32768">Mixtral 8x7B (Groq)</option>
+                <option value="groq/gemma2-9b-it">Gemma 2 9B (Groq)</option>
+                <option value="groq/deepseek-r1-distill-llama-70b">DeepSeek R1 Distill 70B (Groq)</option>
               </optgroup>
               <optgroup label="OpenRouter API (Free)">
                 <option value="openrouter/meta-llama/llama-3.1-8b-instruct:free">Llama 3.1 8B Free</option>
+                <option value="openrouter/meta-llama/llama-3.3-70b-instruct:free">Llama 3.3 70B Free</option>
                 <option value="openrouter/google/gemma-2-9b-it:free">Gemma 2 9B Free</option>
+                <option value="openrouter/mistralai/mistral-7b-instruct:free">Mistral 7B Free</option>
+                <option value="openrouter/deepseek/deepseek-r1:free">DeepSeek R1 Free</option>
+                <option value="openrouter/deepseek/deepseek-chat-v3-0324:free">DeepSeek V3 Free</option>
+                <option value="openrouter/microsoft/phi-4-reasoning:free">Phi-4 Reasoning Free</option>
+                <option value="openrouter/qwen/qwen3-8b:free">Qwen3 8B Free</option>
               </optgroup>
             </select>
           ) : (
@@ -715,9 +728,17 @@ ${activeHtml}
                   : 'bg-white border-slate-200 text-slate-700 focus:border-indigo-500'
                 }`}
             >
-              <option value="Xenova/TinyLlama-1.1B-Chat-v1.0">TinyLlama 1.1B Chat (Best Quality ~650MB)</option>
+              <option value="Xenova/TinyLlama-1.1B-Chat-v1.0">TinyLlama 1.1B Chat ⭐ (~650MB)</option>
+              <option value="Xenova/LLaMA-3.2-3B-Instruct">LLaMA 3.2 3B Instruct 🔥 (~2GB)</option>
+              <option value="Xenova/LLaMA-3.2-1B-Instruct">LLaMA 3.2 1B Instruct 🆕 (~1GB)</option>
+              <option value="Xenova/Qwen1.5-1.8B-Chat">Qwen 1.5 1.8B Chat (~1.1GB)</option>
               <option value="Xenova/Qwen1.5-0.5B-Chat">Qwen 1.5 0.5B Chat (~300MB)</option>
-              <option value="Xenova/LaMini-GPT-124M">LaMini GPT 124M (⚡ Fastest ~250MB)</option>
+              <option value="Xenova/Phi-3-mini-4k-instruct">Phi-3 Mini 4K 🏆 (~2.3GB)</option>
+              <option value="Xenova/phi-1_5">Phi-1.5 💡 (~1.5GB)</option>
+              <option value="Xenova/stablelm-zephyr-3b">StableLM Zephyr 3B 🌟 (~1.8GB)</option>
+              <option value="Xenova/gemma-2b-it">Gemma 2B IT 🔮 (~2.1GB)</option>
+              <option value="Xenova/bloom-560m">BLOOM 560M 🌍 (~560MB)</option>
+              <option value="Xenova/LaMini-GPT-124M">LaMini GPT 124M ⚡ Fastest (~250MB)</option>
             </select>
           )}
 
