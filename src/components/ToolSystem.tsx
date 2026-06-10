@@ -11,6 +11,7 @@ import DevUtilities from './tools/DevUtilities';
 import CodeIntelligence from './tools/CodeIntelligence';
 import WritingLanguage from './tools/WritingLanguage';
 import AiSimulationConsole from './tools/AiSimulationConsole';
+import RealMlTools from './tools/RealMlTools';
 
 // Category Definition
 interface ToolCategory {
@@ -786,7 +787,13 @@ export default function ToolSystem() {
               {activeTool.module === 'dev' && <DevUtilities toolId={activeTool.id} />}
               {activeTool.module === 'code' && <CodeIntelligence toolId={activeTool.id} />}
               {activeTool.module === 'write' && <WritingLanguage toolId={activeTool.id} />}
-              {activeTool.module === 'sim' && <AiSimulationConsole config={AI_SIM_CONFIGS[activeTool.id]} />}
+              {activeTool.module === 'sim' && (
+                ['doc-scanner', 'text-to-speech', 'aes-encrypt', 'voice-recorder', 'meta-stripper', 'key-generator', 'meeting-assistant'].includes(activeTool.id) ? (
+                  <RealMlTools toolId={activeTool.id} />
+                ) : (
+                  <AiSimulationConsole config={AI_SIM_CONFIGS[activeTool.id]} />
+                )
+              )}
             </div>
           ) : (
             /* Render Directory Grid */

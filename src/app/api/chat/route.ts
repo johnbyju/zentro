@@ -137,29 +137,29 @@ export async function POST(request: NextRequest) {
 
     const targetModel = model || 'gemini-2.5-flash';
 
-    // User-supplied keys take priority; fall back to server .env keys
-    const geminiKey  = userKeys?.geminiKey     || process.env.GEMINI_API_KEY;
-    const groqKey    = userKeys?.groqKey        || process.env.GROQ_API_KEY;
-    const openRouterKey = userKeys?.openrouterKey || process.env.OPENROUTE_API_KEY || process.env.OPENROUTER_API_KEY;
+    // User-supplied keys ONLY (no fallback to process.env server-side keys to prevent billing)
+    const geminiKey     = userKeys?.geminiKey;
+    const groqKey       = userKeys?.groqKey;
+    const openRouterKey = userKeys?.openrouterKey;
 
     let responseText = '';
 
     if (targetModel.startsWith('groq/')) {
       if (!groqKey) {
-        throw new Error('No Groq API key found. Add your key via the API Keys button in the header, or set GROQ_API_KEY in .env');
+        throw new Error('No Groq API key found. Add your key via the API Keys button in the header.');
       }
       const actualModel = targetModel.replace('groq/', '');
       responseText = await chatGroq(messages, systemPrompt, groqKey, actualModel);
     } else if (targetModel.startsWith('openrouter/')) {
       if (!openRouterKey) {
-        throw new Error('No OpenRouter API key found. Add your key via the API Keys button in the header, or set OPENROUTE_API_KEY in .env');
+        throw new Error('No OpenRouter API key found. Add your key via the API Keys button in the header.');
       }
       // Strip the "openrouter/" routing prefix — OpenRouter expects just "provider/model:variant"
       const actualModel = targetModel.replace('openrouter/', '');
       responseText = await chatOpenRouter(messages, systemPrompt, openRouterKey, actualModel);
     } else {
       if (!geminiKey) {
-        throw new Error('No Gemini API key found. Add your key via the API Keys button in the header, or set GEMINI_API_KEY in .env');
+        throw new Error('No Gemini API key found. Add your key via the API Keys button in the header.');
       }
       responseText = await chatGemini(messages, systemPrompt, geminiKey, targetModel);
     }

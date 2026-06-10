@@ -58,10 +58,27 @@ export default function PreviewFrame({ html, css, js, projectName = 'Untitled Ap
                          .replace(/<\/body>/i, '');
     }
 
-    // Injected storage namespace script
+    // Injected storage namespace and PGlite script
     const localBackendScript = `
+      <script type="module">
+        import { PGlite } from 'https://cdn.jsdelivr.net/npm/@electric-sql/pglite/dist/index.js';
+        window.PGlite = PGlite;
+        window.db = new PGlite();
+        console.log("⚡ [PGlite] In-browser PostgreSQL initialized on window.db");
+        if (window.resolvePglite) {
+          window.resolvePglite();
+        }
+      </script>
       <script>
         (function() {
+          window.pglitePromise = new Promise((resolve) => {
+            if (window.PGlite) {
+              resolve();
+            } else {
+              window.resolvePglite = resolve;
+            }
+          });
+
           const appNamespace = "sandboxed-app-${projectName.toLowerCase().replace(/[^a-z0-9]/g, '-')}-";
           
           // Hook Local Storage calls
@@ -139,11 +156,16 @@ export default function PreviewFrame({ html, css, js, projectName = 'Untitled Ap
         <body>
           ${bodyContent}
           <script>
-            try {
-              ${js}
-            } catch (err) {
-              console.error(err.message);
-            }
+            (async () => {
+              try {
+                if (window.pglitePromise) {
+                  await window.pglitePromise;
+                }
+                ${js}
+              } catch (err) {
+                console.error(err.message);
+              }
+            })();
           </script>
         </body>
       </html>

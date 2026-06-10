@@ -73,9 +73,50 @@ export default function CodeIntelligence({ toolId }: CodeIntelligenceProps) {
     }
   }, [regexPattern, regexFlags, regexTestText, toolId]);
 
-  // --- 2. SQL Gen & Assistant ---
+  // --- 2. SQL Gen & Assistant with PGlite ---
   const [sqlPrompt, setSqlPrompt] = useState('Retrieve all accounts signed up in 2026 with active status');
   const [sqlResult, setSqlResult] = useState('');
+
+  // PGlite connection & execution state
+  const [pgDb, setPgDb] = useState<any>(null);
+  const [pgStatus, setPgStatus] = useState<'idle' | 'loading' | 'connected' | 'error'>('idle');
+  const [queryInput, setQueryInput] = useState('CREATE TABLE IF NOT EXISTS users (\n  id SERIAL PRIMARY KEY,\n  name VARCHAR(50),\n  email VARCHAR(50),\n  role VARCHAR(50)\n);\n\nINSERT INTO users (name, email, role) VALUES \n  (\'Alice\', \'alice@zentro.io\', \'Developer\'),\n  (\'Bob\', \'bob@zentro.io\', \'Designer\'),\n  (\'Charlie\', \'charlie@zentro.io\', \'Product Manager\')\nON CONFLICT DO NOTHING;\n\nSELECT * FROM users;');
+  const [queryResultsList, setQueryResultsList] = useState<any[]>([]);
+  const [activeResultIdx, setActiveResultIdx] = useState<number>(0);
+  const [sqlExecError, setSqlExecError] = useState('');
+  const [sqlExecSuccess, setSqlExecSuccess] = useState('');
+
+  const initPglite = async () => {
+    if (pgDb || pgStatus === 'loading') return;
+    setPgStatus('loading');
+    try {
+      const pgliteModule = await (new Function('return import("https://cdn.jsdelivr.net/npm/@electric-sql/pglite/dist/index.js")')());
+      const { PGlite } = pgliteModule;
+      const dbInstance = new PGlite();
+      setPgDb(dbInstance);
+      setPgStatus('connected');
+    } catch (e: any) {
+      console.error(e);
+      setPgStatus('error');
+      setErrorMessage(e.message || 'Failed to initialize PGlite database.');
+    }
+  };
+
+  const handleRunQuery = async () => {
+    if (!pgDb) return;
+    setSqlExecError('');
+    setSqlExecSuccess('');
+    setQueryResultsList([]);
+    try {
+      const results = await pgDb.exec(queryInput);
+      setQueryResultsList(Array.isArray(results) ? results : [results]);
+      setActiveResultIdx(0);
+      setSqlExecSuccess('SQL Executed successfully!');
+    } catch (e: any) {
+      setSqlExecError(e.message || 'PostgreSQL execution error.');
+    }
+  };
+
   const handleSqlGen = async () => {
     setIsLoading(true);
     setErrorMessage('');
@@ -263,40 +304,240 @@ export default function CodeIntelligence({ toolId }: CodeIntelligenceProps) {
         </div>
       )}
 
-      {/* 2. SQL GENERATOR & ASSISTANT */}
+      {/* 2. SQL GENERATOR & ASSISTANT WITH REAL PGLITE PLAYGROUND */}
       {toolId === 'sql-query' && (
-        <div className="flex flex-col gap-4">
-          <h3 className="text-sm font-bold text-white uppercase tracking-wider">AI SQL Assistant</h3>
-          <div className="flex flex-col gap-2">
-            <span className="text-xxs text-slate-400 font-bold uppercase">Natural Language Request</span>
-            <textarea 
-              value={sqlPrompt}
-              onChange={(e) => setSqlPrompt(e.target.value)}
-              rows={3}
-              placeholder="e.g. Find all products priced under $50 ordered by status..."
-              className="w-full p-3 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none"
-            />
+        <div className="flex flex-col gap-5">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            {/* Left Column: AI SQL Generation */}
+            <div className="flex flex-col gap-4 bg-slate-900/20 border border-slate-800/80 p-4 rounded-xl">
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+                  <Sparkles size={12} className="text-indigo-400" />
+                  AI SQL Assistant
+                </h4>
+              </div>
+              <div className="flex flex-col gap-2">
+                <span className="text-xxs text-slate-400 font-bold uppercase">Natural Language Prompt</span>
+                <textarea 
+                  value={sqlPrompt}
+                  onChange={(e) => setSqlPrompt(e.target.value)}
+                  rows={3}
+                  placeholder="e.g. Find all products priced under $50 ordered by status..."
+                  className="w-full p-3 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none"
+                />
+              </div>
+
+              <button 
+                onClick={handleSqlGen}
+                disabled={isLoading}
+                className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-800 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-2"
+              >
+                {isLoading ? 'Optimizing Query...' : 'Generate SQL Statement'}
+              </button>
+
+              {sqlResult && (
+                <div className="flex flex-col gap-2">
+                  <span className="text-xxs text-slate-400 font-bold uppercase">Generated SQL Query</span>
+                  <div className="relative">
+                    <pre className="p-4 bg-slate-950 border border-slate-800 rounded-xl text-xs font-mono text-indigo-300 overflow-x-auto min-h-[80px]">
+                      {sqlResult}
+                    </pre>
+                    <div className="absolute top-2 right-2 flex gap-1.5">
+                      <button 
+                        onClick={() => {
+                          setQueryInput(sqlResult);
+                          if (pgStatus !== 'connected') {
+                            initPglite();
+                          }
+                        }}
+                        className="px-2 py-1 text-[10px] bg-indigo-950 border border-indigo-800 hover:text-white text-indigo-300 rounded font-bold transition-all"
+                        title="Copy this query to the SQL Playground"
+                      >
+                        Use in Sandbox
+                      </button>
+                      <button 
+                        onClick={() => copyToClipboard(sqlResult, 'sql')}
+                        className="p-1.5 bg-slate-900 border border-slate-800 text-slate-450 hover:text-white rounded transition-all"
+                      >
+                        {copiedId === 'sql' ? <Check size={13} className="text-emerald-400" /> : <Copy size={13} />}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Right Column: In-Browser Postgres Playground (PGlite) */}
+            <div className="flex flex-col gap-4 bg-slate-900/20 border border-slate-800/80 p-4 rounded-xl">
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+                  <Cpu size={12} className="text-emerald-400" />
+                  In-Browser PostgreSQL Engine (WASM)
+                </h4>
+                {pgStatus === 'connected' && (
+                  <span className="flex items-center gap-1 text-[9px] font-black text-emerald-400 bg-emerald-950/20 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                    <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse"></span>
+                    Postgres WASM Online
+                  </span>
+                )}
+              </div>
+
+              {pgStatus === 'idle' && (
+                <div className="flex-1 flex flex-col items-center justify-center text-center p-6 border border-dashed border-slate-800 rounded-xl gap-3 min-h-[200px]">
+                  <p className="text-xs text-slate-400 max-w-[280px]">
+                    Initialize a lightweight, client-side PostgreSQL instance in your browser using WASM. No server required.
+                  </p>
+                  <button 
+                    onClick={initPglite}
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-all"
+                  >
+                    Start Postgres Database
+                  </button>
+                </div>
+              )}
+
+              {pgStatus === 'loading' && (
+                <div className="flex-1 flex flex-col items-center justify-center text-center p-6 border border-slate-850 rounded-xl gap-3 min-h-[200px]">
+                  <div className="w-6 h-6 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
+                  <span className="text-xs font-bold text-slate-400">Loading WASM DB kernel...</span>
+                </div>
+              )}
+
+              {pgStatus === 'error' && (
+                <div className="flex-1 flex flex-col items-center justify-center text-center p-6 border border-rose-950/30 bg-rose-950/5 rounded-xl gap-3 min-h-[200px]">
+                  <span className="text-xs font-bold text-rose-400">DB kernel loading failed.</span>
+                  <button 
+                    onClick={initPglite}
+                    className="px-3 py-1.5 bg-slate-900 border border-slate-800 text-slate-300 rounded text-xs"
+                  >
+                    Retry Initialization
+                  </button>
+                </div>
+              )}
+
+              {pgStatus === 'connected' && (
+                <div className="flex flex-col gap-3 flex-1">
+                  <div className="flex flex-col gap-1.5">
+                    <span className="text-xxs text-slate-400 font-bold uppercase">SQL Console (Enter query commands)</span>
+                    <textarea 
+                      value={queryInput}
+                      onChange={(e) => setQueryInput(e.target.value)}
+                      rows={5}
+                      className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-lg text-xs font-mono text-slate-100 focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="flex gap-2">
+                    <button 
+                      onClick={handleRunQuery}
+                      className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-all"
+                    >
+                      Run SQL Scripts
+                    </button>
+                    <button 
+                      onClick={() => setQueryInput('SELECT * FROM users;')}
+                      className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-bold transition-all"
+                    >
+                      Reset Query
+                    </button>
+                  </div>
+
+                  {sqlExecError && (
+                    <div className="p-3 bg-rose-950/20 border border-rose-800/40 rounded-lg text-rose-450 text-xxs font-mono whitespace-pre-wrap">
+                      {sqlExecError}
+                    </div>
+                  )}
+
+                  {sqlExecSuccess && !sqlExecError && (
+                    <div className="text-[10px] text-emerald-400 font-semibold flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></span>
+                      {sqlExecSuccess}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
 
-          <button 
-            onClick={handleSqlGen}
-            disabled={isLoading}
-            className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-800 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-2"
-          >
-            <Sparkles size={13} /> {isLoading ? 'Optimizing Query...' : 'Generate SQL Statement'}
-          </button>
+          {/* SQL Execution Results Console */}
+          {pgStatus === 'connected' && queryResultsList.length > 0 && (
+            <div className="flex flex-col gap-3 bg-slate-900/20 border border-slate-800/80 p-4 rounded-xl">
+              <div className="flex items-center justify-between border-b border-slate-800/60 pb-2">
+                <span className="text-xs font-bold text-white uppercase tracking-wider">
+                  Result Sets ({queryResultsList.length})
+                </span>
+                
+                {/* Statement Selector Tabs (if multi-statements executed) */}
+                {queryResultsList.length > 1 && (
+                  <div className="flex gap-1 overflow-x-auto max-w-[400px] py-1 select-none scrollbar-none">
+                    {queryResultsList.map((res, i) => (
+                      <button
+                        key={i}
+                        onClick={() => setActiveResultIdx(i)}
+                        className={`px-2.5 py-1 text-[9px] font-black rounded border transition-all ${
+                          activeResultIdx === i 
+                            ? 'bg-indigo-600 border-indigo-500 text-white shadow-sm' 
+                            : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
+                        }`}
+                      >
+                        Stmt {i+1}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
 
-          {sqlResult && (
-            <div className="relative">
-              <pre className="p-4 bg-slate-950 border border-slate-800 rounded-xl text-xs font-mono text-indigo-300 overflow-x-auto min-h-[100px]">
-                {sqlResult}
-              </pre>
-              <button 
-                onClick={() => copyToClipboard(sqlResult, 'sql')}
-                className="absolute top-2.5 right-2.5 p-1.5 bg-slate-900 border border-slate-850 text-slate-450 hover:text-white rounded"
-              >
-                {copiedId === 'sql' ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
-              </button>
+              {/* Render Selected Statement Result */}
+              {queryResultsList[activeResultIdx] && (() => {
+                const activeRes = queryResultsList[activeResultIdx];
+                const fields = activeRes.fields || [];
+                const rows = activeRes.rows || [];
+                const affectedRows = activeRes.affectedRows != null ? activeRes.affectedRows : null;
+
+                if (fields.length === 0) {
+                  return (
+                    <div className="text-xxs text-slate-400 italic py-2">
+                      Command completed successfully. Affected rows: {affectedRows != null ? affectedRows : 'N/A'}
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="overflow-x-auto border border-slate-850 rounded-lg max-h-[220px]">
+                    <table className="w-full border-collapse text-left text-[11px] text-slate-350">
+                      <thead>
+                        <tr className="border-b border-slate-800 bg-[#080d19]/80 font-bold text-white">
+                          {fields.map((f: any, idx: number) => (
+                            <th key={idx} className="p-2.5 font-mono">{f.name}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-850/40">
+                        {rows.length === 0 ? (
+                          <tr>
+                            <td colSpan={fields.length} className="p-3 text-center text-slate-500 italic">
+                              Zero rows returned.
+                            </td>
+                          </tr>
+                        ) : (
+                          rows.map((row: any, rowIdx: number) => (
+                            <tr key={rowIdx} className="hover:bg-slate-900/30">
+                              {fields.map((f: any, fIdx: number) => {
+                                const cellVal = row[f.name];
+                                return (
+                                  <td key={fIdx} className="p-2.5 font-mono text-slate-300 max-w-[180px] truncate">
+                                    {cellVal == null ? <span className="text-slate-600">NULL</span> : String(cellVal)}
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                );
+              })()}
             </div>
           )}
         </div>

@@ -92,32 +92,29 @@ async function queryOpenRouter(promptText: string, apiKey: string, model: string
   return text.trim();
 }
 
-// Orchestrator that queries only the selected model and fails immediately on quota/rate limits
-async function querySelectedModel(promptText: string, model: string): Promise<string> {
+// Orchestrator that queries only the selected model
+async function querySelectedModel(promptText: string, model: string, apiKey: string): Promise<string> {
   if (model.startsWith('groq/')) {
-    const groqKey = process.env.GROQ_API_KEY;
-    if (!groqKey) {
-      throw new Error("GROQ_API_KEY is not configured in your .env file.");
+    if (!apiKey) {
+      throw new Error("No Groq API key found. Add your key via the API Keys button in the header.");
     }
     const actualModel = model.replace('groq/', '');
-    return await queryGroq(promptText, groqKey, actualModel);
+    return await queryGroq(promptText, apiKey, actualModel);
   }
 
   if (model.startsWith('openrouter/')) {
-    const openRouterKey = process.env.OPENROUTE_API_KEY || process.env.OPENROUTER_API_KEY;
-    if (!openRouterKey) {
-      throw new Error("OPENROUTE_API_KEY is not configured in your .env file.");
+    if (!apiKey) {
+      throw new Error("No OpenRouter API key found. Add your key via the API Keys button in the header.");
     }
     const actualModel = model.replace('openrouter/', '');
-    return await queryOpenRouter(promptText, openRouterKey, actualModel);
+    return await queryOpenRouter(promptText, apiKey, actualModel);
   }
 
   // Otherwise, default to Gemini
-  const geminiKey = process.env.GEMINI_API_KEY;
-  if (!geminiKey) {
-    throw new Error("GEMINI_API_KEY is not configured in your .env file.");
+  if (!apiKey) {
+    throw new Error("No Gemini API key found. Add your key via the API Keys button in the header.");
   }
-  return await queryGemini(promptText, geminiKey, model);
+  return await queryGemini(promptText, apiKey, model);
 }
 
 // Clean helper to extract HTML from LLM output (removing markdown fences if present)
@@ -633,18 +630,22 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  // User-supplied keys take priority; fall back to server .env keys
-  const geminiKey     = userKeys?.geminiKey     || process.env.GEMINI_API_KEY;
-  const groqKey       = userKeys?.groqKey        || process.env.GROQ_API_KEY;
-  const openRouterKey = userKeys?.openrouterKey  || process.env.OPENROUTE_API_KEY || process.env.OPENROUTER_API_KEY;
+  // User-supplied keys ONLY (no fallback to process.env server-side keys to prevent billing)
+  const geminiKey     = userKeys?.geminiKey;
+  const groqKey       = userKeys?.groqKey;
+  const openRouterKey = userKeys?.openrouterKey;
 
   let hasKeyForModel = false;
+  let modelKey = '';
   if (model?.startsWith('groq/')) {
     hasKeyForModel = !!groqKey;
+    modelKey = groqKey || '';
   } else if (model?.startsWith('openrouter/')) {
     hasKeyForModel = !!openRouterKey;
+    modelKey = openRouterKey || '';
   } else {
     hasKeyForModel = !!geminiKey;
+    modelKey = geminiKey || '';
   }
 
   // Setup streaming response
@@ -669,7 +670,7 @@ export async function POST(request: NextRequest) {
           // Pass 1: Analyze
           sendEvent({ pass: 1, status: 'start', message: 'Analyzing User Request with AI Engine...' });
           const p1Prompt = `Analyze this prompt for building a single-page web app: "${prompt}". Output a plain JSON object with fields: "app" (app name), "features" (array of string features). Output ONLY raw JSON, no markdown formatting.`;
-          const p1Raw = await querySelectedModel(p1Prompt, model);
+          const p1Raw = await querySelectedModel(p1Prompt, model, modelKey);
           let p1Result = { app: 'Custom App', features: ['Core Dashboard'] };
           try {
             p1Result = JSON.parse(p1Raw.replace(/```json|```/g, '').trim());
@@ -681,7 +682,7 @@ export async function POST(request: NextRequest) {
           // Pass 2: Plan
           sendEvent({ pass: 2, status: 'start', message: 'Formulating Architecture Plan with AI Engine...' });
           const p2Prompt = `Create an implementation architecture list for: "${prompt}". Features list: ${JSON.stringify(p1Result.features)}. Return a plain JSON object: { "steps": ["step 1", "step 2"] }. Output ONLY raw JSON, no markdown fences.`;
-          const p2Raw = await querySelectedModel(p2Prompt, model);
+          const p2Raw = await querySelectedModel(p2Prompt, model, modelKey);
           let p2Result = { steps: ['Create elements layout', 'Build action handlers'] };
           try {
             p2Result = JSON.parse(p2Raw.replace(/```json|```/g, '').trim());
@@ -693,7 +694,7 @@ export async function POST(request: NextRequest) {
           // Pass 3: Generate Base Code
           sendEvent({ pass: 3, status: 'start', message: 'Generating Single-Page Code (AI Pass 3)...' });
           const p3Prompt = `Write a single-page HTML application for: "${prompt}" matching this architectural plan: ${JSON.stringify(p2Result.steps)}. You MUST embed CSS inside a <style> tag and Javascript inside a <script> tag. All dependencies must be CDN links (use boxicons at "https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css" and Google Fonts Outfit). Make it visually stunning, fully responsive, and highly interactive. Output ONLY the complete HTML document starting with <!DOCTYPE html>. No markdown fences, no chat intro/outro, just raw HTML.`;
-          const p3Raw = await querySelectedModel(p3Prompt, model);
+          const p3Raw = await querySelectedModel(p3Prompt, model, modelKey);
           const baseCode = cleanHtmlOutput(p3Raw);
           const baseDecomposed = decomposeHtml(baseCode);
           sendEvent({ pass: 3, status: 'complete', message: 'Base code successfully compiled!', data: baseDecomposed });
@@ -701,14 +702,14 @@ export async function POST(request: NextRequest) {
           // Pass 4: Self-Review Audit
           sendEvent({ pass: 4, status: 'start', message: 'Running Automated Code Review (AI Pass 4)...' });
           const p4Prompt = `Review this single-page HTML code for any script errors, broken CSS layouts, unclosed tags, or unhandled events: \n\n${baseCode}\n\nReturn the audited, fully corrected HTML document. If no errors are found, return the input code as-is. Output ONLY the raw HTML code. Do NOT wrap it in markdown fences, and do NOT write any explanation text.`;
-          const p4Raw = await querySelectedModel(p4Prompt, model);
+          const p4Raw = await querySelectedModel(p4Prompt, model, modelKey);
           const auditedCode = cleanHtmlOutput(p4Raw);
           sendEvent({ pass: 4, status: 'complete', message: 'Self-review checked and corrected.', data: { audit: 'DOM, script event listeners and boxicons links verified.', patchesApplied: ['Self-Review script integrity check completed'] } });
 
           // Pass 5: Polish UX
           sendEvent({ pass: 5, status: 'start', message: 'Polishing UX Styles & Aesthetics (AI Pass 5)...' });
           const p5Prompt = `Apply advanced visual CSS styling adjustments to this HTML page: \n\n${auditedCode}\n\nAdd vibrant gradients, glassmorphism overlays, smooth transitions on interactive hover states, micro-animations, and clean dark mode styles where appropriate. Return ONLY the final polished HTML document. Do NOT wrap it in markdown fences, and do NOT write any explanation text.`;
-          const p5Raw = await querySelectedModel(p5Prompt, model);
+          const p5Raw = await querySelectedModel(p5Prompt, model, modelKey);
           const polishedCode = cleanHtmlOutput(p5Raw);
           const polishedDecomposed = decomposeHtml(polishedCode);
           sendEvent({ pass: 5, status: 'complete', message: 'Aesthetics polished. Ready to execute!', data: { polishes: ['Hover animations', 'Clean color gradients', 'Responsive flex layout'], files: polishedDecomposed } });

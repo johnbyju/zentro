@@ -9,7 +9,7 @@ test.describe('Zentro Workspace E2E Tests', () => {
 
   test('should load the workspace interface correctly', async ({ page }) => {
     // Check header logos and layout controls
-    await expect(page.locator('text=ZENTRO')).toBeVisible();
+    await expect(page.locator('header').getByText('ZENTRO')).toBeVisible();
     await expect(page.locator('text=Browser AI Workspace')).toBeVisible();
     
     // Check main panels (chats history list, Monaco editor container, Preview frame)
@@ -30,9 +30,9 @@ test.describe('Zentro Workspace E2E Tests', () => {
 
     // Wait for the visual pipeline logs and completion ticks to succeed
     // We target Pass 1 (Analyze Request), Pass 3 (Generate Code), and Pass 5 (Polish UX)
-    const pass1Badge = page.locator('span:has-text("1")');
-    const pass3Badge = page.locator('span:has-text("3")');
-    const pass5Badge = page.locator('span:has-text("5")');
+    const pass1Badge = page.locator('aside span:has-text("1")').first();
+    const pass3Badge = page.locator('aside span:has-text("3")').first();
+    const pass5Badge = page.locator('aside span:has-text("5")').first();
     
     await expect(pass1Badge).toBeVisible();
     await expect(pass3Badge).toBeVisible();

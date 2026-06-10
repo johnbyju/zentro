@@ -88,6 +88,7 @@ export default function WorkspacePage() {
 
   // API Key Settings Modal
   const [showApiModal, setShowApiModal] = useState(false);
+  const [showLocalModelOnboarding, setShowLocalModelOnboarding] = useState(false);
   const [apiKeyTab, setApiKeyTab] = useState<'gemini' | 'groq' | 'openrouter'>('gemini');
   const [apiKeyInput, setApiKeyInput] = useState('');
   const [showApiKeyValue, setShowApiKeyValue] = useState(false);
@@ -161,7 +162,7 @@ export default function WorkspacePage() {
     workerRef.current = new Worker('/ai-worker.js', { type: 'module' });
 
     workerRef.current.onmessage = (event) => {
-      const { status, message, progress, loaded, total, token, error, result } = event.data;
+      const { status, message, progress, loaded, total, token, error, result, pass, data } = event.data;
 
       if (status === 'loading') {
         setLocalModelStatus('loading');
@@ -174,6 +175,29 @@ export default function WorkspacePage() {
       } else if (status === 'ready') {
         setLocalModelStatus('ready');
         setLocalModelMsg('Local AI Active (Ready offline)');
+      } else if (status === 'pass_start') {
+        setPipelinePass(pass);
+        setPipelineStatus(prev => ({ ...prev, [pass]: 'running' }));
+        setPipelineLogs(prev => ({ ...prev, [pass]: message || 'Processing...' }));
+      } else if (status === 'pass_complete') {
+        setPipelineStatus(prev => ({ ...prev, [pass]: 'success' }));
+        if (pass === 1) {
+          setPipelineLogs(prev => ({ ...prev, 1: `App Name: ${data.app}\nFeatures: ${data.features.join(', ')}` }));
+        } else if (pass === 2) {
+          setPipelineLogs(prev => ({ ...prev, 2: `Blueprint: ${data.steps.join('\n')}` }));
+        } else if (pass === 3) {
+          setPipelineLogs(prev => ({ ...prev, 3: `Code files synthesized.` }));
+          setActiveHtml(data.html);
+          setActiveCss(data.css);
+          setActiveJs(data.js);
+        } else if (pass === 4) {
+          setPipelineLogs(prev => ({ ...prev, 4: `Audit: ${data.audit}\nPatches: ${data.patchesApplied.join(', ')}` }));
+        } else if (pass === 5) {
+          setPipelineLogs(prev => ({ ...prev, 5: `Responsive layouts and styles variables applied.` }));
+          setActiveHtml(data.files.html);
+          setActiveCss(data.files.css);
+          setActiveJs(data.files.js);
+        }
       } else if (status === 'generating') {
         // Dynamic logs inside pipeline
         setPipelineLogs(prev => ({
@@ -410,15 +434,13 @@ ${activeHtml}
 
     if (engineMode === 'local') {
       if (localModelStatus !== 'ready') {
-        showError('Local model not ready', 'Please initialize/download the Local LLM model first using the top bar control.');
+        setShowLocalModelOnboarding(true);
         setGenerationActive(false);
         return;
       }
       // Set pendingChatIdRef BEFORE posting to worker (state update is async)
       pendingChatIdRef.current = chatId;
       // Trigger Web Worker local generation
-      setPipelinePass(3); // Start generation phase visual loading directly
-      setPipelineStatus(prev => ({ ...prev, 1: 'success', 2: 'success', 3: 'running' }));
       workerRef.current?.postMessage({
         type: 'generate',
         data: { prompt: text }
@@ -596,13 +618,8 @@ ${activeHtml}
     setActiveCss(css);
     setActiveJs(js);
 
+    // Local worker streams pass statuses dynamically
     setPipelineStatus(prev => ({ ...prev, 3: 'success', 4: 'success', 5: 'success' }));
-    setPipelineLogs(prev => ({
-      ...prev,
-      3: 'Generated code from local model',
-      4: 'Self-review checked local ONNX syntax',
-      5: 'Applied local styles variables'
-    }));
 
     const assistantMessage: Omit<Message, 'id'> = {
       chatId: activeChatId,
@@ -648,7 +665,12 @@ ${activeHtml}
               <Server size={12} /> Server Engine
             </button>
             <button
-              onClick={() => setEngineMode('local')}
+              onClick={() => {
+                setEngineMode('local');
+                if (localModelStatus === 'idle') {
+                  setShowLocalModelOnboarding(true);
+                }
+              }}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-all ${engineMode === 'local'
                   ? 'bg-indigo-600 text-white shadow-sm'
                   : 'text-slate-400 hover:text-slate-200'
@@ -1101,6 +1123,80 @@ ${activeHtml}
               <p className="text-[9.5px] text-slate-600 leading-relaxed">
                 🔒 Keys are stored in your browser&apos;s localStorage. They are sent directly to the AI provider and are never logged or stored on our servers.
               </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Local AI Onboarding / Download Modal ─── */}
+      {showLocalModelOnboarding && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(7,9,20,0.85)', backdropFilter: 'blur(8px)' }}>
+          <div className="w-[500px] rounded-2xl border border-white/[0.08] bg-[#0b0c18] shadow-[0_24px_80px_rgba(0,0,0,0.6)] overflow-hidden">
+            {/* Modal header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.06]">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-indigo-600/10 border border-indigo-500/25 flex items-center justify-center">
+                  <Cpu size={15} className="text-indigo-400" />
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-white leading-none">Initialize Local Offline AI</p>
+                  <p className="text-[10px] text-slate-500 mt-0.5">Run private generation in-browser via WebAssembly & WebGPU</p>
+                </div>
+              </div>
+              <button onClick={() => setShowLocalModelOnboarding(false)} className="p-1.5 rounded-md hover:bg-white/[0.05] text-slate-500 hover:text-white transition-colors">
+                <X size={15} />
+              </button>
+            </div>
+
+            {/* Modal body */}
+            <div className="p-5 flex flex-col gap-4">
+              <p className="text-xs text-slate-450 leading-relaxed">
+                To run code-building completely offline with absolute privacy, Zentro downloads and caches a Large Language Model (LLM) inside your browser's local cache. 
+              </p>
+
+              <div className="flex flex-col gap-2">
+                <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Select LLM Size</label>
+                <select
+                  value={localModel}
+                  onChange={handleLocalModelChange}
+                  className="w-full px-3 py-2.5 rounded-lg bg-[#070914] border border-white/[0.06] text-xs text-slate-200 focus:outline-none focus:border-indigo-500/50 transition-colors"
+                >
+                  <option value="Xenova/TinyLlama-1.1B-Chat-v1.0">TinyLlama 1.1B Chat (Best Quality ~650MB)</option>
+                  <option value="Xenova/Qwen1.5-0.5B-Chat">Qwen 1.5 0.5B Chat (Balanced ~300MB)</option>
+                  <option value="Xenova/LaMini-GPT-124M">LaMini GPT 124M (Fastest ~250MB)</option>
+                </select>
+              </div>
+
+              <div className="rounded-xl bg-indigo-950/20 border border-indigo-850/30 p-3.5 flex flex-col gap-2 text-xxs text-slate-400">
+                <div className="flex items-center gap-1.5 font-bold text-indigo-300">
+                  <Sparkles size={11} />
+                  <span>How it works:</span>
+                </div>
+                <ul className="list-disc pl-4 flex flex-col gap-1 text-slate-400">
+                  <li>Downloads are cached securely in your browser's IndexedDB.</li>
+                  <li>Subsequent generation queries will boot instantly and run 100% offline.</li>
+                  <li>Initial load requires a stable internet connection.</li>
+                </ul>
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-2.5 mt-2">
+                <button
+                  onClick={() => setShowLocalModelOnboarding(false)}
+                  className="flex-1 py-2.5 rounded-lg border border-white/[0.06] hover:bg-white/[0.02] text-slate-300 text-xs font-bold transition-all"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    setShowLocalModelOnboarding(false);
+                    handleInitLocalModel();
+                  }}
+                  className="flex-1 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition-all shadow-[0_4px_20px_rgba(99,102,241,0.25)]"
+                >
+                  Download & Initialize
+                </button>
+              </div>
             </div>
           </div>
         </div>
