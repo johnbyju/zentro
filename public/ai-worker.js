@@ -140,13 +140,31 @@ function classifyLoadError(err) {
   return 'unknown';
 }
 
-/** Large / onnx-community models: q4 only — other dtypes cause WASM abort / OOM. */
-function getDtypesToTry(expectedBytes, modelName = '') {
-  if (modelName.startsWith('onnx-community/')) return ['q4'];
+/**
+ * Pick dtypes to try. onnx-community models ship model_q4f16.onnx (~1.2 GB) for WebGPU
+ * and model_q4.onnx (~1.7 GB) as fallback — q4f16 must be tried first on GPU.
+ */
+function getDtypesToTry(expectedBytes, modelName = '', device = 'wasm') {
+  if (modelName.startsWith('onnx-community/')) {
+    return device === 'webgpu' ? ['q4f16', 'q4'] : ['q4'];
+  }
   const sizeMB = expectedBytes / (1024 * 1024);
-  if (sizeMB >= 1200) return ['q4'];
+  if (sizeMB >= 1200) return device === 'webgpu' ? ['q4f16', 'q4'] : ['q4'];
   if (sizeMB >= 700) return ['q4', 'q8'];
   return ['q4', 'q8', 'fp32'];
+}
+
+/** Expected download size per model + dtype (bytes) for progress bar accuracy */
+const MODEL_DTYPE_SIZES_MB = {
+  'onnx-community/Qwen2.5-1.5B-Instruct': { q4f16: 1165, q4: 1700 },
+  'onnx-community/Qwen2.5-Coder-1.5B-Instruct': { q4f16: 1165, q4: 1700 },
+  'onnx-community/Qwen2.5-Coder-3B-Instruct': { q4f16: 1800, q4: 2400 },
+};
+
+function getExpectedBytesForLoad(modelName, dtype, fallbackBytes) {
+  const sizes = MODEL_DTYPE_SIZES_MB[modelName];
+  if (sizes?.[dtype]) return sizes[dtype] * 1024 * 1024;
+  return fallbackBytes;
 }
 
 function createDownloadTracker(expectedBytes = 0) {
@@ -421,7 +439,7 @@ self.addEventListener('message', async (event) => {
         message: isRestore ? `Restoring ${shortName} from cache...` : `Preparing ${shortName}...`,
       });
 
-      const downloadTracker = createDownloadTracker(expectedBytes);
+      let downloadTracker = createDownloadTracker(expectedBytes);
       let compilePct = 93;
 
       const startCompileHeartbeat = () => {
@@ -433,26 +451,25 @@ self.addEventListener('message', async (event) => {
         }, 1200);
       };
 
-      const progressCallback = (info) => {
-        downloadTracker.handle(info);
-        if (downloadTracker.isWeightsComplete()) {
-          startCompileHeartbeat();
-        }
-      };
-
-      const dtypesToTry = getDtypesToTry(expectedBytes, modelName);
       const device = await pickInferenceDevice();
+      const dtypesToTry = getDtypesToTry(expectedBytes, modelName, device);
       const sizeMB = expectedBytes / (1024 * 1024);
+      const needsWebGpu = modelName.startsWith('onnx-community/') || sizeMB >= 1100;
 
-      if (sizeMB >= 1200 && device !== 'webgpu') {
+      if (needsWebGpu && device !== 'webgpu') {
         throw new Error(
-          'This model (~1.5 GB+) requires WebGPU. Use Chrome 113+ or Edge 113+ with hardware acceleration enabled, or pick a smaller model under 700 MB.'
+          'This model requires WebGPU. Use Chrome 113+ or Edge 113+ with hardware acceleration enabled, or pick a smaller model under 700 MB.'
         );
       }
 
+      self.postMessage({
+        status: 'loading',
+        message: `Using ${device.toUpperCase()} backend${device === 'webgpu' ? ' (recommended)' : ''}...`,
+      });
+
       let lastError = null;
-      // Large / onnx-community models must not fall back to WASM — it always OOM-crashes
-      const wasmOk = sizeMB < 700 && !modelName.startsWith('onnx-community/');
+      // onnx-community / large models: WebGPU only — WASM always OOM-crashes
+      const wasmOk = !needsWebGpu && sizeMB < 700;
       const devicesToTry = device === 'webgpu'
         ? (wasmOk ? ['webgpu', 'wasm'] : ['webgpu'])
         : ['wasm'];
@@ -466,12 +483,19 @@ self.addEventListener('message', async (event) => {
               clearInterval(compileInterval);
               compileInterval = null;
             }
+            const dtypeExpectedBytes = getExpectedBytesForLoad(modelName, dtype, expectedBytes);
+            downloadTracker = createDownloadTracker(dtypeExpectedBytes);
+            const dtypeProgressCallback = (info) => {
+              downloadTracker.handle(info);
+              if (downloadTracker.isWeightsComplete()) startCompileHeartbeat();
+            };
+
             self.postMessage({
               status: 'loading',
-              message: `Loading (${dtype}, ${tryDevice})...`,
+              message: `Loading ${dtype} on ${tryDevice}...`,
             });
             generator = await pipeline('text-generation', modelName, {
-              progress_callback: progressCallback,
+              progress_callback: dtypeProgressCallback,
               dtype,
               device: tryDevice,
             });
@@ -480,7 +504,12 @@ self.addEventListener('message', async (event) => {
           } catch (err) {
             lastError = err;
             generator = null;
-            if (isMemoryError(err) || isWasmRuntimeError(err)) break outer;
+            // Try next dtype (e.g. q4f16 → q4) unless hard crash
+            if (isMemoryError(err) || isWasmRuntimeError(err)) {
+              // On WebGPU, allow trying next dtype; on WASM, stop immediately
+              if (tryDevice === 'wasm') break outer;
+              continue;
+            }
           }
         }
       }

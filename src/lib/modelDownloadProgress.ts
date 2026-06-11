@@ -62,8 +62,8 @@ export const MODEL_DOWNLOAD_SIZES_MB: Record<string, number> = {
   'Xenova/LLaMA-3.2-1B-Instruct': 1000,
   'Xenova/LLaMA-3.2-3B-Instruct': 2000,
   'Xenova/Phi-3-mini-4k-instruct': 2300,
-  'onnx-community/Qwen2.5-1.5B-Instruct': 1560,
-  'onnx-community/Qwen2.5-Coder-1.5B-Instruct': 1600,
+  'onnx-community/Qwen2.5-1.5B-Instruct': 1165,
+  'onnx-community/Qwen2.5-Coder-1.5B-Instruct': 1165,
   'onnx-community/Qwen2.5-Coder-3B-Instruct': 2400,
   'Xenova/bloom-560m': 560,
 };

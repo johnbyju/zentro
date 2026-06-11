@@ -195,9 +195,10 @@ const LOCAL_MODEL_LIBRARY: LocalModelInfo[] = [
     name: 'Qwen 2.5 1.5B Instruct',
     family: 'Qwen',
     category: 'medium',
-    sizeMB: 1560,
-    description: 'Alibaba Qwen 2.5 1.5B — strong general chat model with excellent instruction following.',
-    tags: ['Qwen', 'Chat', 'Instruct'],
+    sizeMB: 1165,
+    description: 'Alibaba Qwen 2.5 1.5B — strong general chat model. Uses q4f16 WebGPU weights (~1.2 GB).',
+    tags: ['Qwen', 'Chat', 'WebGPU'],
+    badge: '🎮 WebGPU'
   },
   {
     id: 'Xenova/falcon-rw-1b',
@@ -255,9 +256,9 @@ const LOCAL_MODEL_LIBRARY: LocalModelInfo[] = [
     name: 'Qwen2.5 Coder 1.5B',
     family: 'Qwen',
     category: 'small',
-    sizeMB: 1600,
-    description: 'Alibaba Qwen2.5 Coder 1.5B — strong coding assistant, excellent for front-end generation.',
-    tags: ['Qwen', 'Code', 'Frontend'],
+    sizeMB: 1165,
+    description: 'Alibaba Qwen2.5 Coder 1.5B — strong coding assistant. Uses q4f16 WebGPU weights (~1.2 GB).',
+    tags: ['Qwen', 'Code', 'WebGPU'],
     badge: '💻 Best Coder Small'
   },
   {
