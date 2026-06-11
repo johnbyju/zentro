@@ -36,10 +36,22 @@ export async function GET(
   const hfResponse = await fetch(hfUrl, { headers });
 
   const responseHeaders = new Headers();
-  const contentType = hfResponse.headers.get('Content-Type');
-  if (contentType) {
-    responseHeaders.set('Content-Type', contentType);
+  const forwardHeaders = [
+    'Content-Type',
+    'Content-Length',
+    'Content-Disposition',
+    'Accept-Ranges',
+    'ETag',
+    'Last-Modified',
+  ];
+
+  for (const header of forwardHeaders) {
+    const value = hfResponse.headers.get(header);
+    if (value) {
+      responseHeaders.set(header, value);
+    }
   }
+
   if (hfResponse.ok) {
     responseHeaders.set('Cache-Control', 'public, max-age=31536000, immutable');
   }

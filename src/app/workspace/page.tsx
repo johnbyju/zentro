@@ -2,6 +2,12 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { parseModelLoadError, type ModelLoadErrorType } from '@/lib/modelLoadErrors';
+import {
+  INITIAL_MODEL_DOWNLOAD_PROGRESS,
+  parseWorkerDownloadEvent,
+  type ModelDownloadProgressState,
+} from '@/lib/modelDownloadProgress';
+import ModelDownloadOverlay from '@/components/ModelDownloadOverlay';
 import JSZip from 'jszip';
 import Link from 'next/link';
 import {
@@ -79,6 +85,7 @@ export default function WorkspacePage() {
   const [localModelStatus, setLocalModelStatus] = useState<'idle' | 'loading' | 'progress' | 'ready' | 'error'>('idle');
   const [localModelMsg, setLocalModelMsg] = useState('Click to Download & Run Locally');
   const [localModelPercent, setLocalModelPercent] = useState(0);
+  const [downloadProgress, setDownloadProgress] = useState<ModelDownloadProgressState>(INITIAL_MODEL_DOWNLOAD_PROGRESS);
 
   const workerRef = useRef<Worker | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -177,19 +184,32 @@ export default function WorkspacePage() {
     workerRef.current = new Worker('/ai-worker.js', { type: 'module' });
 
     workerRef.current.onmessage = (event) => {
-      const { status, message, progress, loaded, total, token, error, result, pass, data, errorType } = event.data;
+      const { status, message, progress, token, error, result, pass, data, errorType } = event.data;
 
       if (status === 'loading') {
         setLocalModelStatus('loading');
         setLocalModelMsg(message);
+        setDownloadProgress((prev) => ({
+          ...prev,
+          phase: message?.toLowerCase().includes('compile') ? 'compile' : 'download',
+          message: message || prev.message,
+        }));
       } else if (status === 'progress') {
         setLocalModelStatus('progress');
-        const pct = Math.round(progress);
-        setLocalModelPercent(pct);
-        setLocalModelMsg(`Downloading model files... ${pct}%`);
+        const parsed = parseWorkerDownloadEvent(event.data);
+        if (parsed) {
+          setDownloadProgress((prev) => ({ ...prev, ...parsed }));
+          if (parsed.percent != null) setLocalModelPercent(parsed.percent);
+          if (parsed.message) setLocalModelMsg(parsed.message);
+        } else {
+          const pct = Math.round(progress ?? 0);
+          setLocalModelPercent(pct);
+          setLocalModelMsg(`Downloading model files... ${pct}%`);
+        }
       } else if (status === 'ready') {
         setLocalModelStatus('ready');
         setLocalModelMsg('Local AI Active (Ready offline)');
+        setDownloadProgress(INITIAL_MODEL_DOWNLOAD_PROGRESS);
       } else if (status === 'pass_start') {
         setPipelinePass(pass);
         setPipelineStatus(prev => ({ ...prev, [pass]: 'running' }));
@@ -223,6 +243,7 @@ export default function WorkspacePage() {
         handleLocalModelCompletion(result, pendingChatIdRef.current);
       } else if (status === 'error') {
         setLocalModelStatus('error');
+        setDownloadProgress(INITIAL_MODEL_DOWNLOAD_PROGRESS);
         const info = parseModelLoadError(error || '', errorType as ModelLoadErrorType | undefined);
         setLocalModelMsg(info.message);
         setGenerationActive(false);
@@ -312,6 +333,8 @@ export default function WorkspacePage() {
   // Launch Local Model weight downloader
   const handleInitLocalModel = () => {
     if (localModelStatus === 'ready' || localModelStatus === 'loading' || localModelStatus === 'progress') return;
+    setLocalModelPercent(0);
+    setDownloadProgress(INITIAL_MODEL_DOWNLOAD_PROGRESS);
     const userHfToken = apiKeys['huggingface'] || '';
     workerRef.current?.postMessage({
       type: 'load',
@@ -1175,6 +1198,12 @@ ${activeHtml}
           </div>
         </div>
       )}
+
+      <ModelDownloadOverlay
+        visible={engineMode === 'local' && (localModelStatus === 'loading' || localModelStatus === 'progress')}
+        modelName={localModel.split('/').pop() || localModel}
+        progress={downloadProgress}
+      />
 
       {/* ─── Local AI Onboarding / Download Modal ─── */}
       {showLocalModelOnboarding && (

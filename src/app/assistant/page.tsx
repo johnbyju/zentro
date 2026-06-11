@@ -2,6 +2,12 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { parseModelLoadError, type ModelLoadErrorType } from '@/lib/modelLoadErrors';
+import {
+  INITIAL_MODEL_DOWNLOAD_PROGRESS,
+  parseWorkerDownloadEvent,
+  type ModelDownloadProgressState,
+} from '@/lib/modelDownloadProgress';
+import ModelDownloadOverlay from '@/components/ModelDownloadOverlay';
 import Link from 'next/link';
 import { 
   Bot, 
@@ -340,6 +346,7 @@ export default function AssistantPage() {
   const [localModelMsg, setLocalModelMsg] = useState('No model loaded — click "Choose Model" to select one');
   const [localModelPercent, setLocalModelPercent] = useState(0);
   const [loadedModelId, setLoadedModelId] = useState<string | null>(null);
+  const [downloadProgress, setDownloadProgress] = useState<ModelDownloadProgressState>(INITIAL_MODEL_DOWNLOAD_PROGRESS);
 
   // Memories & Personas States
   const [memories, setMemories] = useState<string[]>([]);
@@ -415,18 +422,32 @@ export default function AssistantPage() {
       if (status === 'loading') {
         setLocalModelStatus('loading');
         setLocalModelMsg(message);
+        setDownloadProgress((prev) => ({
+          ...prev,
+          phase: message?.toLowerCase().includes('compile') ? 'compile' : 'download',
+          message: message || prev.message,
+        }));
       } else if (status === 'progress') {
         setLocalModelStatus('progress');
-        const pct = Math.round(progress);
-        setLocalModelPercent(pct);
-        setLocalModelMsg(`Downloading model files... ${pct}%`);
+        const parsed = parseWorkerDownloadEvent(event.data);
+        if (parsed) {
+          setDownloadProgress((prev) => ({ ...prev, ...parsed }));
+          if (parsed.percent != null) setLocalModelPercent(parsed.percent);
+          if (parsed.message) setLocalModelMsg(parsed.message);
+        } else {
+          const pct = Math.round(progress ?? 0);
+          setLocalModelPercent(pct);
+          setLocalModelMsg(`Downloading model files... ${pct}%`);
+        }
       } else if (status === 'ready') {
         setLocalModelStatus('ready');
         setLocalModelMsg('Local AI Active — ready offline');
+        setDownloadProgress(INITIAL_MODEL_DOWNLOAD_PROGRESS);
       } else if (status === 'complete') {
         handleLocalModelCompletion(result, pendingChatIdRef.current);
       } else if (status === 'error') {
         setLocalModelStatus('error');
+        setDownloadProgress(INITIAL_MODEL_DOWNLOAD_PROGRESS);
         const info = parseModelLoadError(error || '', errorType as ModelLoadErrorType | undefined);
         setLocalModelMsg(info.message);
         setGenerationActive(false);
@@ -560,6 +581,7 @@ export default function AssistantPage() {
     setLocalModelStatus('loading');
     setLocalModelMsg('Preparing model download...');
     setLocalModelPercent(0);
+    setDownloadProgress(INITIAL_MODEL_DOWNLOAD_PROGRESS);
     setEngineMode('local');
     const userHfToken = apiKeys['huggingface'] || '';
     workerRef.current?.postMessage({
@@ -582,6 +604,7 @@ export default function AssistantPage() {
     setLocalModelStatus('loading');
     setLocalModelMsg('Preparing model...');
     setLocalModelPercent(0);
+    setDownloadProgress(INITIAL_MODEL_DOWNLOAD_PROGRESS);
     const userHfToken = apiKeys['huggingface'] || '';
     workerRef.current?.postMessage({
       type: 'load',
@@ -1530,6 +1553,12 @@ export default function AssistantPage() {
           </div>
         </div>
       )}
+
+      <ModelDownloadOverlay
+        visible={engineMode === 'local' && (localModelStatus === 'loading' || localModelStatus === 'progress')}
+        modelName={selectedModelInfo?.name || localModelId.split('/').pop() || localModelId}
+        progress={downloadProgress}
+      />
 
       {/* ══════════════════════════════════════════════════════════════════════
           API KEYS MODAL

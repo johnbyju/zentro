@@ -55,6 +55,129 @@ async function verifyProxyReachable(origin) {
   }
 }
 
+function formatBytes(bytes) {
+  if (!bytes || bytes <= 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  const unitIndex = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  const value = bytes / 1024 ** unitIndex;
+  const decimals = unitIndex === 0 ? 0 : value >= 100 ? 0 : value >= 10 ? 1 : 2;
+  return `${value.toFixed(decimals)} ${units[unitIndex]}`;
+}
+
+function createDownloadTracker() {
+  const files = new Map();
+  let lastPostAt = 0;
+
+  function snapshot() {
+    let loadedSum = 0;
+    let totalSum = 0;
+    let doneCount = 0;
+    let currentFile = '';
+
+    for (const [name, entry] of files) {
+      loadedSum += entry.loaded;
+      if (entry.total > 0) totalSum += entry.total;
+      if (entry.done) doneCount += 1;
+      else if (!currentFile) currentFile = name;
+    }
+
+    let percent = 0;
+    if (totalSum > 0) {
+      percent = Math.round((loadedSum / totalSum) * 100);
+    } else if (files.size > 0) {
+      percent = Math.round((doneCount / files.size) * 100);
+    }
+
+    return {
+      percent,
+      loaded: loadedSum,
+      total: totalSum,
+      currentFile,
+      filesDone: doneCount,
+      filesTotal: files.size,
+    };
+  }
+
+  function postProgress(phase, messageOverride) {
+    const now = Date.now();
+    const snap = snapshot();
+    const displayPercent = phase === 'compile'
+      ? Math.max(snap.percent, 95)
+      : Math.min(snap.percent, 94);
+
+    if (phase === 'download' && now - lastPostAt < 80 && displayPercent > 0 && displayPercent < 94) {
+      return;
+    }
+    lastPostAt = now;
+
+    const shortFile = snap.currentFile ? snap.currentFile.split('/').pop() : 'model weights';
+    const sizeLabel = snap.total > 0
+      ? `${formatBytes(snap.loaded)} of ${formatBytes(snap.total)}`
+      : snap.filesTotal > 0
+        ? `${snap.filesDone} of ${snap.filesTotal} files`
+        : 'Preparing download...';
+
+    self.postMessage({
+      status: 'progress',
+      progress: displayPercent,
+      file: snap.currentFile,
+      loaded: snap.loaded,
+      total: snap.total,
+      filesDone: snap.filesDone,
+      filesTotal: snap.filesTotal,
+      phase,
+      message: messageOverride || (phase === 'compile'
+        ? 'Compiling model for WebGPU...'
+        : `Downloading ${shortFile} · ${sizeLabel}`),
+    });
+  }
+
+  return {
+    handle(info) {
+      const filename = info.file || info.name || 'unknown';
+
+      if (info.status === 'download' || info.status === 'initiate') {
+        if (!files.has(filename)) {
+          files.set(filename, { loaded: 0, total: 0, done: false });
+        }
+        postProgress('download');
+        return;
+      }
+
+      if (info.status === 'progress') {
+        const prev = files.get(filename) || { loaded: 0, total: 0, done: false };
+        files.set(filename, {
+          loaded: info.loaded ?? prev.loaded,
+          total: info.total ?? prev.total,
+          done: false,
+        });
+        postProgress('download');
+        return;
+      }
+
+      if (info.status === 'done') {
+        const prev = files.get(filename) || { loaded: 0, total: 0, done: false };
+        const finalTotal = prev.total || prev.loaded || info.total || 0;
+        files.set(filename, {
+          loaded: finalTotal,
+          total: finalTotal,
+          done: true,
+        });
+        const snap = snapshot();
+        if (snap.filesTotal > 0 && snap.filesDone === snap.filesTotal) {
+          postProgress('compile');
+        } else {
+          postProgress('download');
+        }
+      }
+    },
+    reset() {
+      files.clear();
+      lastPostAt = 0;
+    },
+  };
+}
+
 // ── Chat-template fallback ─────────────────────────────────────────────────
 // Converts message array → plain string for models without a chat template
 function messagesToString(messages) {
@@ -131,15 +254,9 @@ self.addEventListener('message', async (event) => {
       const shortName = modelName.split('/').pop();
       self.postMessage({ status: 'loading', message: `Preparing ${shortName}...` });
 
+      const downloadTracker = createDownloadTracker();
       const progressCallback = (info) => {
-        if (info.status === 'initiate') {
-          self.postMessage({ status: 'loading', message: `Fetching: ${info.file}` });
-        } else if (info.status === 'progress') {
-          const pct = info.progress != null ? Math.round(info.progress) : 0;
-          self.postMessage({ status: 'progress', file: info.file, progress: pct, loaded: info.loaded || 0, total: info.total || 0 });
-        } else if (info.status === 'done') {
-          self.postMessage({ status: 'loading', message: `Loaded: ${info.file}` });
-        }
+        downloadTracker.handle(info);
       };
 
       // Try quantized formats in order
@@ -147,6 +264,7 @@ self.addEventListener('message', async (event) => {
       let lastError = null;
       for (const dtype of dtypesToTry) {
         try {
+          downloadTracker.reset();
           self.postMessage({ status: 'loading', message: `Loading (${dtype})...` });
           generator = await pipeline('text-generation', modelName, { progress_callback: progressCallback, dtype });
           lastError = null;
@@ -346,11 +464,9 @@ self.addEventListener('message', async (event) => {
       configureHfAccess({ useProxy: useHfProxy !== false, userToken: token || '', origin: origin || '' });
       self.postMessage({ status: 'loading', message: 'Initializing Whisper transcription...' });
 
+      const downloadTracker = createDownloadTracker();
       const progressCallback = (info) => {
-        if (info.status === 'progress') {
-          const pct = info.progress != null ? Math.round(info.progress) : 0;
-          self.postMessage({ status: 'progress', progress: pct, message: `Downloading transcription weights... ${pct}%` });
-        }
+        downloadTracker.handle(info);
       };
 
       const transcriber = await pipeline('automatic-speech-recognition', 'Xenova/whisper-tiny.en', {
