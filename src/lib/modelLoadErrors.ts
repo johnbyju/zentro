@@ -4,6 +4,7 @@ export type ModelLoadErrorType =
   | 'forbidden'
   | 'network'
   | 'memory'
+  | 'webgpu'
   | 'unknown';
 
 export type ModelLoadErrorInfo = {
@@ -20,7 +21,7 @@ export function parseModelLoadError(
   const lower = (error || '').toLowerCase();
   const type: ModelLoadErrorType =
     errorType ||
-    (lower.includes('array buffer allocation failed') || lower.includes('out of memory') || lower.includes('allocation failed')
+    (lower.includes('array buffer allocation failed') || lower.includes('out of memory') || lower.includes('allocation failed') || lower.includes('aborted()') || lower.includes('-sassertions')
       ? 'memory'
       : lower.includes('could not locate file') || lower.includes('404') || lower.includes('invalid model id')
         ? 'unavailable'
@@ -28,9 +29,11 @@ export function parseModelLoadError(
           ? 'auth'
           : lower.includes('forbidden') || lower.includes('403')
             ? 'forbidden'
-            : lower.includes('cannot reach') || lower.includes('proxy') || lower.includes('internet')
-              ? 'network'
-              : 'unknown');
+            : lower.includes('requires webgpu')
+              ? 'webgpu'
+              : lower.includes('cannot reach') || lower.includes('proxy') || lower.includes('internet')
+                ? 'network'
+                : 'unknown');
 
   switch (type) {
     case 'unavailable':
@@ -65,11 +68,20 @@ export function parseModelLoadError(
         errorType: type,
         suggestModelLibrary: false,
       };
+    case 'webgpu':
+      return {
+        message: 'WebGPU required for this model',
+        reason:
+          'Models over ~1.5 GB need WebGPU to run in the browser. Use Chrome 113+ or Edge 113+ with hardware acceleration on, or choose a smaller model (TinyLlama 1.1B, Qwen 0.5B, LaMini 124M).',
+        errorType: type,
+        suggestModelLibrary: true,
+      };
     case 'memory':
       return {
-        message: 'Not enough browser memory',
-        reason:
-          'This model is too large for your available RAM. Close other tabs and apps, then retry — or switch to a smaller model like LaMini GPT 124M (~250 MB), Qwen 0.5B (~300 MB), or TinyLlama 1.1B (~650 MB).',
+        message: lower.includes('aborted()') ? 'Model runtime failed (WASM/WebGPU)' : 'Not enough browser memory',
+        reason: lower.includes('aborted()')
+          ? 'The ONNX runtime crashed while loading this model — usually too large for WASM or not enough RAM. Use Chrome/Edge (WebGPU), close other tabs, then try a smaller model: LaMini GPT 124M (~250 MB), Qwen 0.5B (~300 MB), or TinyLlama 1.1B (~650 MB).'
+          : 'This model is too large for your available RAM. Close other tabs and apps, then retry — or switch to a smaller model like LaMini GPT 124M (~250 MB), Qwen 0.5B (~300 MB), or TinyLlama 1.1B (~650 MB).',
         errorType: type,
         suggestModelLibrary: true,
       };

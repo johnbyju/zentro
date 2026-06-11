@@ -1347,9 +1347,12 @@ ${activeHtml}
                   <p className="text-[10px] text-red-400 font-semibold mt-0.5 tracking-wide">
                     {errorPopup.message === 'Model not available'
                       ? 'MODEL UNAVAILABLE'
-                      : errorPopup.message === 'Not enough browser memory'
-                        ? 'OUT OF MEMORY'
-                        : 'API QUOTA / RATE LIMIT'}
+                      : errorPopup.message === 'WebGPU required for this model'
+                        ? 'WEBGPU REQUIRED'
+                        : errorPopup.message === 'Model runtime failed (WASM/WebGPU)' ||
+                          errorPopup.message === 'Not enough browser memory'
+                          ? 'OUT OF MEMORY'
+                          : 'API QUOTA / RATE LIMIT'}
                   </p>
                 </div>
               </div>
@@ -1374,7 +1377,10 @@ ${activeHtml}
               <p className="text-[10px] text-slate-500 leading-snug">
                 {errorPopup.message === 'Model not available' ? (
                   <>Choose a different model from the <span className="text-[#6DD3FF] font-semibold">local model dropdown</span> at the top.</>
-                ) : errorPopup.message === 'Not enough browser memory' ? (
+                ) : errorPopup.message === 'WebGPU required for this model' ? (
+                  <>Use Chrome 113+ or Edge 113+, or pick a smaller model from the dropdown.</>
+                ) : errorPopup.message === 'Model runtime failed (WASM/WebGPU)' ||
+                  errorPopup.message === 'Not enough browser memory' ? (
                   <>Close other tabs, refresh, then pick a smaller model (LaMini 124M, Qwen 0.5B, or TinyLlama 1.1B).</>
                 ) : (
                   <>Switch the model from the <span className="text-[#6DD3FF] font-semibold">top dropdown</span> to Groq or OpenRouter and try again.</>

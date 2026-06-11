@@ -1763,9 +1763,12 @@ export default function AssistantPage() {
                   <p className="text-[10px] text-red-400 font-semibold mt-0.5 tracking-wide">
                     {errorPopup.message === 'Model not available'
                       ? 'MODEL UNAVAILABLE'
-                      : errorPopup.message === 'Not enough browser memory'
-                        ? 'OUT OF MEMORY'
-                        : 'ERROR'}
+                      : errorPopup.message === 'WebGPU required for this model'
+                        ? 'WEBGPU REQUIRED'
+                        : errorPopup.message === 'Model runtime failed (WASM/WebGPU)' ||
+                          errorPopup.message === 'Not enough browser memory'
+                          ? 'OUT OF MEMORY'
+                          : 'ERROR'}
                   </p>
                 </div>
               </div>
@@ -1783,7 +1786,10 @@ export default function AssistantPage() {
               <p className="text-[10px] text-slate-500 leading-snug">
                 {errorPopup.message === 'Model not available' ? (
                   <>Pick another model from the <span className="text-[#6DD3FF] font-semibold">Model Library</span> — it should open automatically.</>
-                ) : errorPopup.message === 'Not enough browser memory' ? (
+                ) : errorPopup.message === 'WebGPU required for this model' ? (
+                  <>Use Chrome 113+ or Edge 113+, or pick a smaller model from the <span className="text-[#6DD3FF] font-semibold">Model Library</span>.</>
+                ) : errorPopup.message === 'Model runtime failed (WASM/WebGPU)' ||
+                  errorPopup.message === 'Not enough browser memory' ? (
                   <>Close other tabs, refresh the page, then try a smaller model from the <span className="text-[#6DD3FF] font-semibold">Model Library</span>.</>
                 ) : (
                   <>Switch the model from the <span className="text-[#6DD3FF] font-semibold">top controls</span> to try again.</>

@@ -6,7 +6,30 @@ import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@huggingface/transfo
 // ── Environment ────────────────────────────────────────────────────────────
 env.allowLocalModels = false;
 env.useBrowserCache = true;
-env.backends.onnx.wasm.numThreads = 1;
+
+function configureOnnxRuntime() {
+  // Single thread — stable on Safari and when COOP/COEP is partial
+  env.backends.onnx.wasm.numThreads = 1;
+  // Already inside a dedicated worker — no nested proxy needed
+  env.backends.onnx.wasm.proxy = false;
+  // Explicit CDN paths so WASM never resolves to an HTML error page
+  env.backends.onnx.wasm.wasmPaths =
+    'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.21.0/dist/';
+}
+
+configureOnnxRuntime();
+
+async function pickInferenceDevice() {
+  try {
+    if (typeof navigator !== 'undefined' && navigator.gpu) {
+      const adapter = await navigator.gpu.requestAdapter();
+      if (adapter) return 'webgpu';
+    }
+  } catch {
+    // fall through to wasm
+  }
+  return 'wasm';
+}
 
 // ── State ──────────────────────────────────────────────────────────────────
 let generator = null;
@@ -73,17 +96,24 @@ function isMemoryError(err) {
   return /array buffer allocation failed|out of memory|allocation failed|oom|memory limit|cannot allocate/i.test(msg);
 }
 
+function isWasmRuntimeError(err) {
+  const msg = err?.message || String(err || '');
+  return /aborted\(\)|build with -sassertions|no available backend|wasm.*failed|runtimeerror.*aborted|offset is out of bounds/i.test(msg);
+}
+
 function classifyLoadError(err) {
   const msg = err?.message || String(err || '');
-  if (isMemoryError(err)) return 'memory';
+  if (msg.includes('requires WebGPU')) return 'webgpu';
+  if (isMemoryError(err) || isWasmRuntimeError(err)) return 'memory';
   if (msg.includes('Unauthorized') || msg.includes('401')) return 'auth';
   if (msg.includes('Could not locate file') || msg.includes('404') || msg.includes('invalid model ID')) return 'unavailable';
   if (msg.includes('Forbidden') || msg.includes('403')) return 'forbidden';
   return 'unknown';
 }
 
-/** Large models need a single q4 attempt — retrying other dtypes multiplies RAM use. */
-function getDtypesToTry(expectedBytes) {
+/** Large / onnx-community models: q4 only — other dtypes cause WASM abort / OOM. */
+function getDtypesToTry(expectedBytes, modelName = '') {
+  if (modelName.startsWith('onnx-community/')) return ['q4'];
   const sizeMB = expectedBytes / (1024 * 1024);
   if (sizeMB >= 1200) return ['q4'];
   if (sizeMB >= 700) return ['q4', 'q8'];
@@ -300,7 +330,7 @@ async function runGenerator(messages, opts) {
 self.addEventListener('unhandledrejection', (event) => {
   if (!isLoading) return;
   const reason = event.reason;
-  if (!isMemoryError(reason)) return;
+  if (!isMemoryError(reason) && !isWasmRuntimeError(reason)) return;
   isLoading = false;
   generator = null;
   const msg = reason?.message || String(reason);
@@ -374,28 +404,44 @@ self.addEventListener('message', async (event) => {
         }
       };
 
-      const dtypesToTry = getDtypesToTry(expectedBytes);
+      const dtypesToTry = getDtypesToTry(expectedBytes, modelName);
+      const device = await pickInferenceDevice();
+      const sizeMB = expectedBytes / (1024 * 1024);
+
+      if (sizeMB >= 1200 && device !== 'webgpu') {
+        throw new Error(
+          'This model (~1.5 GB+) requires WebGPU. Use Chrome 113+ or Edge 113+ with hardware acceleration enabled, or pick a smaller model under 700 MB.'
+        );
+      }
+
       let lastError = null;
-      for (const dtype of dtypesToTry) {
-        try {
-          downloadTracker.reset();
-          compilePct = 93;
-          if (compileInterval) {
-            clearInterval(compileInterval);
-            compileInterval = null;
+      const devicesToTry = device === 'webgpu' ? ['webgpu', 'wasm'] : ['wasm'];
+
+      outer: for (const dtype of dtypesToTry) {
+        for (const tryDevice of devicesToTry) {
+          try {
+            downloadTracker.reset();
+            compilePct = 93;
+            if (compileInterval) {
+              clearInterval(compileInterval);
+              compileInterval = null;
+            }
+            self.postMessage({
+              status: 'loading',
+              message: `Loading (${dtype}, ${tryDevice})...`,
+            });
+            generator = await pipeline('text-generation', modelName, {
+              progress_callback: progressCallback,
+              dtype,
+              device: tryDevice,
+            });
+            lastError = null;
+            break outer;
+          } catch (err) {
+            lastError = err;
+            generator = null;
+            if (isMemoryError(err) || isWasmRuntimeError(err)) break outer;
           }
-          self.postMessage({ status: 'loading', message: `Loading (${dtype})...` });
-          generator = await pipeline('text-generation', modelName, {
-            progress_callback: progressCallback,
-            dtype,
-            device: 'wasm',
-          });
-          lastError = null;
-          break;
-        } catch (err) {
-          lastError = err;
-          generator = null;
-          if (isMemoryError(err)) break;
         }
       }
 
