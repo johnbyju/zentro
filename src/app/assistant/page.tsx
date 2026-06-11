@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { parseModelLoadError, type ModelLoadErrorType } from '@/lib/modelLoadErrors';
 import {
   INITIAL_MODEL_DOWNLOAD_PROGRESS,
+  getModelExpectedBytes,
   parseWorkerDownloadEvent,
   type ModelDownloadProgressState,
 } from '@/lib/modelDownloadProgress';
@@ -189,7 +190,7 @@ const LOCAL_MODEL_LIBRARY: LocalModelInfo[] = [
     name: 'Qwen 2.5 1.5B Instruct',
     family: 'Qwen',
     category: 'medium',
-    sizeMB: 1600,
+    sizeMB: 1560,
     description: 'Alibaba Qwen 2.5 1.5B — strong general chat model with excellent instruction following.',
     tags: ['Qwen', 'Chat', 'Instruct'],
   },
@@ -581,13 +582,18 @@ export default function AssistantPage() {
     setLocalModelStatus('loading');
     setLocalModelMsg('Preparing model download...');
     setLocalModelPercent(0);
-    setDownloadProgress(INITIAL_MODEL_DOWNLOAD_PROGRESS);
+    const modelInfo = LOCAL_MODEL_LIBRARY.find((m) => m.id === modelId);
+    setDownloadProgress({
+      ...INITIAL_MODEL_DOWNLOAD_PROGRESS,
+      total: getModelExpectedBytes(modelId),
+    });
     setEngineMode('local');
     const userHfToken = apiKeys['huggingface'] || '';
     workerRef.current?.postMessage({
       type: 'load',
       data: {
         model: modelId,
+        expectedSizeMB: modelInfo?.sizeMB ?? 0,
         useHfProxy: true,
         token: userHfToken,
         origin: window.location.origin,
@@ -604,12 +610,17 @@ export default function AssistantPage() {
     setLocalModelStatus('loading');
     setLocalModelMsg('Preparing model...');
     setLocalModelPercent(0);
-    setDownloadProgress(INITIAL_MODEL_DOWNLOAD_PROGRESS);
+    setDownloadProgress({
+      ...INITIAL_MODEL_DOWNLOAD_PROGRESS,
+      total: getModelExpectedBytes(localModelId),
+    });
     const userHfToken = apiKeys['huggingface'] || '';
+    const modelInfo = LOCAL_MODEL_LIBRARY.find((m) => m.id === localModelId);
     workerRef.current?.postMessage({
       type: 'load',
       data: {
         model: localModelId,
+        expectedSizeMB: modelInfo?.sizeMB ?? 0,
         useHfProxy: true,
         token: userHfToken,
         origin: window.location.origin,
@@ -1710,7 +1721,11 @@ export default function AssistantPage() {
                 <div>
                   <p className="text-xs font-bold text-white leading-none">{errorPopup.message}</p>
                   <p className="text-[10px] text-red-400 font-semibold mt-0.5 tracking-wide">
-                    {errorPopup.message === 'Model not available' ? 'MODEL UNAVAILABLE' : 'ERROR'}
+                    {errorPopup.message === 'Model not available'
+                      ? 'MODEL UNAVAILABLE'
+                      : errorPopup.message === 'Not enough browser memory'
+                        ? 'OUT OF MEMORY'
+                        : 'ERROR'}
                   </p>
                 </div>
               </div>
@@ -1728,6 +1743,8 @@ export default function AssistantPage() {
               <p className="text-[10px] text-slate-500 leading-snug">
                 {errorPopup.message === 'Model not available' ? (
                   <>Pick another model from the <span className="text-[#6DD3FF] font-semibold">Model Library</span> — it should open automatically.</>
+                ) : errorPopup.message === 'Not enough browser memory' ? (
+                  <>Close other tabs, refresh the page, then try a smaller model from the <span className="text-[#6DD3FF] font-semibold">Model Library</span>.</>
                 ) : (
                   <>Switch the model from the <span className="text-[#6DD3FF] font-semibold">top controls</span> to try again.</>
                 )}

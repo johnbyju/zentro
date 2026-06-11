@@ -3,6 +3,7 @@ export type ModelLoadErrorType =
   | 'auth'
   | 'forbidden'
   | 'network'
+  | 'memory'
   | 'unknown';
 
 export type ModelLoadErrorInfo = {
@@ -19,15 +20,17 @@ export function parseModelLoadError(
   const lower = (error || '').toLowerCase();
   const type: ModelLoadErrorType =
     errorType ||
-    (lower.includes('could not locate file') || lower.includes('404') || lower.includes('invalid model id')
-      ? 'unavailable'
-      : lower.includes('unauthorized') || lower.includes('401')
-        ? 'auth'
-        : lower.includes('forbidden') || lower.includes('403')
-          ? 'forbidden'
-          : lower.includes('cannot reach') || lower.includes('proxy') || lower.includes('internet')
-            ? 'network'
-            : 'unknown');
+    (lower.includes('array buffer allocation failed') || lower.includes('out of memory') || lower.includes('allocation failed')
+      ? 'memory'
+      : lower.includes('could not locate file') || lower.includes('404') || lower.includes('invalid model id')
+        ? 'unavailable'
+        : lower.includes('unauthorized') || lower.includes('401')
+          ? 'auth'
+          : lower.includes('forbidden') || lower.includes('403')
+            ? 'forbidden'
+            : lower.includes('cannot reach') || lower.includes('proxy') || lower.includes('internet')
+              ? 'network'
+              : 'unknown');
 
   switch (type) {
     case 'unavailable':
@@ -61,6 +64,14 @@ export function parseModelLoadError(
           'Make sure `npm run dev` is running and you are online for the first download.',
         errorType: type,
         suggestModelLibrary: false,
+      };
+    case 'memory':
+      return {
+        message: 'Not enough browser memory',
+        reason:
+          'This model is too large for your available RAM. Close other tabs and apps, then retry — or switch to a smaller model like LaMini GPT 124M (~250 MB), Qwen 0.5B (~300 MB), or TinyLlama 1.1B (~650 MB).',
+        errorType: type,
+        suggestModelLibrary: true,
       };
     default:
       return {

@@ -64,116 +64,191 @@ function formatBytes(bytes) {
   return `${value.toFixed(decimals)} ${units[unitIndex]}`;
 }
 
-function createDownloadTracker() {
-  const files = new Map();
+function isWeightFile(filename) {
+  return /\.onnx_data$/i.test(filename) || /\.onnx$/i.test(filename);
+}
+
+function isMemoryError(err) {
+  const msg = err?.message || String(err || '');
+  return /array buffer allocation failed|out of memory|allocation failed|oom|memory limit|cannot allocate/i.test(msg);
+}
+
+function classifyLoadError(err) {
+  const msg = err?.message || String(err || '');
+  if (isMemoryError(err)) return 'memory';
+  if (msg.includes('Unauthorized') || msg.includes('401')) return 'auth';
+  if (msg.includes('Could not locate file') || msg.includes('404') || msg.includes('invalid model ID')) return 'unavailable';
+  if (msg.includes('Forbidden') || msg.includes('403')) return 'forbidden';
+  return 'unknown';
+}
+
+/** Large models need a single q4 attempt — retrying other dtypes multiplies RAM use. */
+function getDtypesToTry(expectedBytes) {
+  const sizeMB = expectedBytes / (1024 * 1024);
+  if (sizeMB >= 1200) return ['q4'];
+  if (sizeMB >= 700) return ['q4', 'q8'];
+  return ['q4', 'q8', 'fp32'];
+}
+
+function createDownloadTracker(expectedBytes = 0) {
+  let smallBytesDone = 0;
+  let peakWeightBytes = 0;
+  let activeFile = '';
+  let activeLoaded = 0;
+  let activeTotal = 0;
+  let filesDone = 0;
+  const seenFiles = new Set();
+  const completedFiles = new Set();
   let lastPostAt = 0;
+  let lastPercent = 0;
 
-  function snapshot() {
-    let loadedSum = 0;
-    let totalSum = 0;
-    let doneCount = 0;
-    let currentFile = '';
+  function getWeightBytes() {
+    if (activeFile && isWeightFile(activeFile)) {
+      return Math.max(peakWeightBytes, activeLoaded);
+    }
+    return peakWeightBytes;
+  }
 
-    for (const [name, entry] of files) {
-      loadedSum += entry.loaded;
-      if (entry.total > 0) totalSum += entry.total;
-      if (entry.done) doneCount += 1;
-      else if (!currentFile) currentFile = name;
+  function getDownloadedBytes() {
+    const raw = smallBytesDone + getWeightBytes();
+    return expectedBytes > 0 ? Math.min(raw, expectedBytes) : raw;
+  }
+
+  function getPercent(phase) {
+    if (phase === 'compile') return Math.max(lastPercent, 93);
+    if (phase === 'ready') return 100;
+
+    const downloaded = getDownloadedBytes();
+    if (expectedBytes > 0) {
+      // Reserve 8% for small files, 84% for weight download, cap at 92% until compile.
+      const smallPct = Math.min(8, filesDone * 1.5);
+      const weightPct = Math.min(84, (getWeightBytes() / expectedBytes) * 84);
+      return Math.min(92, Math.round(smallPct + weightPct));
     }
 
-    let percent = 0;
-    if (totalSum > 0) {
-      percent = Math.round((loadedSum / totalSum) * 100);
-    } else if (files.size > 0) {
-      percent = Math.round((doneCount / files.size) * 100);
+    if (activeTotal > activeLoaded && activeTotal > 0) {
+      return Math.min(92, Math.round((activeLoaded / activeTotal) * 92));
     }
 
-    return {
-      percent,
-      loaded: loadedSum,
-      total: totalSum,
-      currentFile,
-      filesDone: doneCount,
-      filesTotal: files.size,
-    };
+    if (seenFiles.size > 0) {
+      return Math.min(92, Math.round((filesDone / seenFiles.size) * 92));
+    }
+
+    return 0;
+  }
+
+  function buildMessage(phase, downloaded) {
+    const shortFile = activeFile ? activeFile.split('/').pop() : '';
+
+    if (phase === 'compile') {
+      return 'Compiling model for WebGPU — almost ready...';
+    }
+
+    if (expectedBytes > 0) {
+      const overallLabel = `${formatBytes(downloaded)} of ${formatBytes(expectedBytes)}`;
+      if (shortFile && activeTotal > activeLoaded) {
+        return `${overallLabel} · ${shortFile}`;
+      }
+      if (shortFile) {
+        return `${overallLabel} · ${shortFile}`;
+      }
+      return overallLabel;
+    }
+
+    return shortFile ? `Downloading ${shortFile}` : 'Downloading model files...';
   }
 
   function postProgress(phase, messageOverride) {
     const now = Date.now();
-    const snap = snapshot();
-    const displayPercent = phase === 'compile'
-      ? Math.max(snap.percent, 95)
-      : Math.min(snap.percent, 94);
+    const percent = getPercent(phase);
 
-    if (phase === 'download' && now - lastPostAt < 80 && displayPercent > 0 && displayPercent < 94) {
+    if (phase === 'download' && now - lastPostAt < 120 && percent === lastPercent) {
       return;
     }
     lastPostAt = now;
+    lastPercent = percent;
 
-    const shortFile = snap.currentFile ? snap.currentFile.split('/').pop() : 'model weights';
-    const sizeLabel = snap.total > 0
-      ? `${formatBytes(snap.loaded)} of ${formatBytes(snap.total)}`
-      : snap.filesTotal > 0
-        ? `${snap.filesDone} of ${snap.filesTotal} files`
-        : 'Preparing download...';
-
+    const downloaded = getDownloadedBytes();
     self.postMessage({
       status: 'progress',
-      progress: displayPercent,
-      file: snap.currentFile,
-      loaded: snap.loaded,
-      total: snap.total,
-      filesDone: snap.filesDone,
-      filesTotal: snap.filesTotal,
+      progress: percent,
+      file: activeFile,
+      loaded: downloaded,
+      total: expectedBytes,
+      activeLoaded,
+      activeTotal,
+      filesDone,
+      filesTotal: seenFiles.size,
       phase,
-      message: messageOverride || (phase === 'compile'
-        ? 'Compiling model for WebGPU...'
-        : `Downloading ${shortFile} · ${sizeLabel}`),
+      message: messageOverride || buildMessage(phase, downloaded),
     });
   }
 
   return {
     handle(info) {
-      const filename = info.file || info.name || 'unknown';
+      const filename = info.file || info.name || '';
+      if (!filename) return;
 
       if (info.status === 'download' || info.status === 'initiate') {
-        if (!files.has(filename)) {
-          files.set(filename, { loaded: 0, total: 0, done: false });
-        }
+        seenFiles.add(filename);
+        activeFile = filename;
+        activeLoaded = 0;
+        activeTotal = 0;
         postProgress('download');
         return;
       }
 
       if (info.status === 'progress') {
-        const prev = files.get(filename) || { loaded: 0, total: 0, done: false };
-        files.set(filename, {
-          loaded: info.loaded ?? prev.loaded,
-          total: info.total ?? prev.total,
-          done: false,
-        });
+        activeFile = filename;
+        activeLoaded = Math.max(activeLoaded, info.loaded ?? 0);
+        if (info.total && info.total > activeLoaded) {
+          activeTotal = info.total;
+        }
+        if (isWeightFile(filename)) {
+          peakWeightBytes = Math.max(peakWeightBytes, activeLoaded);
+        }
         postProgress('download');
         return;
       }
 
       if (info.status === 'done') {
-        const prev = files.get(filename) || { loaded: 0, total: 0, done: false };
-        const finalTotal = prev.total || prev.loaded || info.total || 0;
-        files.set(filename, {
-          loaded: finalTotal,
-          total: finalTotal,
-          done: true,
-        });
-        const snap = snapshot();
-        if (snap.filesTotal > 0 && snap.filesDone === snap.filesTotal) {
-          postProgress('compile');
-        } else {
-          postProgress('download');
+        if (!completedFiles.has(filename)) {
+          completedFiles.add(filename);
+          filesDone += 1;
+
+          const fileSize = activeFile === filename
+            ? (activeTotal > activeLoaded ? activeTotal : Math.max(activeLoaded, activeTotal))
+            : 0;
+
+          if (isWeightFile(filename) && fileSize > 0) {
+            peakWeightBytes = Math.max(peakWeightBytes, fileSize);
+          } else if (fileSize > 0) {
+            smallBytesDone += fileSize;
+          }
         }
+
+        if (activeFile === filename) {
+          activeFile = '';
+          activeLoaded = 0;
+          activeTotal = 0;
+        }
+        postProgress('download');
       }
     },
+    markCompile() {
+      postProgress('compile');
+    },
     reset() {
-      files.clear();
+      smallBytesDone = 0;
+      peakWeightBytes = 0;
+      activeFile = '';
+      activeLoaded = 0;
+      activeTotal = 0;
+      filesDone = 0;
+      seenFiles.clear();
+      completedFiles.clear();
       lastPostAt = 0;
+      lastPercent = 0;
     },
   };
 }
@@ -215,6 +290,18 @@ async function runGenerator(messages, opts) {
   }
 }
 
+// Catch OOM errors that escape the pipeline try/catch (e.g. inside progress read)
+self.addEventListener('unhandledrejection', (event) => {
+  if (!isLoading) return;
+  const reason = event.reason;
+  if (!isMemoryError(reason)) return;
+  isLoading = false;
+  generator = null;
+  const msg = reason?.message || String(reason);
+  self.postMessage({ status: 'error', error: msg, errorType: 'memory' });
+  event.preventDefault();
+});
+
 // ── Message Handler ────────────────────────────────────────────────────────
 self.addEventListener('message', async (event) => {
   const { type, data } = event.data;
@@ -227,6 +314,9 @@ self.addEventListener('message', async (event) => {
     const userToken = (data && data.token) ? data.token : '';
     const useHfProxy = data?.useHfProxy !== false;
     const origin = (data && data.origin) ? data.origin : '';
+    const expectedBytes = (data?.expectedSizeMB > 0)
+      ? Math.round(data.expectedSizeMB * 1024 * 1024)
+      : 0;
 
     configureHfAccess({ useProxy: useHfProxy, userToken, origin });
 
@@ -254,28 +344,47 @@ self.addEventListener('message', async (event) => {
       const shortName = modelName.split('/').pop();
       self.postMessage({ status: 'loading', message: `Preparing ${shortName}...` });
 
-      const downloadTracker = createDownloadTracker();
+      const downloadTracker = createDownloadTracker(expectedBytes);
       const progressCallback = (info) => {
         downloadTracker.handle(info);
       };
 
-      // Try quantized formats in order
-      const dtypesToTry = ['q4', 'q8', 'fp32'];
+      const dtypesToTry = getDtypesToTry(expectedBytes);
       let lastError = null;
       for (const dtype of dtypesToTry) {
         try {
           downloadTracker.reset();
           self.postMessage({ status: 'loading', message: `Loading (${dtype})...` });
-          generator = await pipeline('text-generation', modelName, { progress_callback: progressCallback, dtype });
+          generator = await pipeline('text-generation', modelName, {
+            progress_callback: progressCallback,
+            dtype,
+            device: 'wasm',
+          });
           lastError = null;
           break;
         } catch (err) {
           lastError = err;
           generator = null;
+          if (isMemoryError(err)) break;
         }
       }
 
       if (!generator) throw lastError || new Error('All formats failed');
+
+      downloadTracker.markCompile();
+      self.postMessage({
+        status: 'progress',
+        progress: 100,
+        file: '',
+        loaded: expectedBytes,
+        total: expectedBytes,
+        activeLoaded: 0,
+        activeTotal: 0,
+        filesDone: 0,
+        filesTotal: 0,
+        phase: 'ready',
+        message: 'Model ready — fully offline!',
+      });
 
       currentModelName = modelName;
       isLoading = false;
@@ -285,14 +394,7 @@ self.addEventListener('message', async (event) => {
       isLoading = false;
       generator = null;
       const msg = err?.message || String(err);
-      let errorType = 'unknown';
-      if (msg.includes('Unauthorized') || msg.includes('401')) {
-        errorType = 'auth';
-      } else if (msg.includes('Could not locate file') || msg.includes('404') || msg.includes('invalid model ID')) {
-        errorType = 'unavailable';
-      } else if (msg.includes('Forbidden') || msg.includes('403')) {
-        errorType = 'forbidden';
-      }
+      const errorType = classifyLoadError(err);
       self.postMessage({ status: 'error', error: msg, errorType });
     }
   }

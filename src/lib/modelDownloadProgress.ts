@@ -3,6 +3,8 @@ export interface ModelDownloadProgressState {
   loaded: number;
   total: number;
   currentFile: string;
+  currentFileLoaded: number;
+  currentFileTotal: number;
   filesDone: number;
   filesTotal: number;
   phase: 'download' | 'compile' | 'ready';
@@ -14,11 +16,35 @@ export const INITIAL_MODEL_DOWNLOAD_PROGRESS: ModelDownloadProgressState = {
   loaded: 0,
   total: 0,
   currentFile: '',
+  currentFileLoaded: 0,
+  currentFileTotal: 0,
   filesDone: 0,
   filesTotal: 0,
   phase: 'download',
   message: 'Preparing download...',
 };
+
+/** Approximate download sizes used for overall progress when per-file totals are unreliable. */
+export const MODEL_DOWNLOAD_SIZES_MB: Record<string, number> = {
+  'Xenova/LaMini-GPT-124M': 250,
+  'Xenova/gpt2': 250,
+  'Xenova/distilgpt2': 170,
+  'Xenova/TinyLlama-1.1B-Chat-v1.0': 650,
+  'Xenova/Qwen1.5-0.5B-Chat': 300,
+  'Xenova/Qwen1.5-1.8B-Chat': 1100,
+  'Xenova/LLaMA-3.2-1B-Instruct': 1000,
+  'Xenova/LLaMA-3.2-3B-Instruct': 2000,
+  'Xenova/Phi-3-mini-4k-instruct': 2300,
+  'onnx-community/Qwen2.5-1.5B-Instruct': 1560,
+  'onnx-community/Qwen2.5-Coder-1.5B-Instruct': 1600,
+  'onnx-community/Qwen2.5-Coder-3B-Instruct': 2400,
+  'Xenova/bloom-560m': 560,
+};
+
+export function getModelExpectedBytes(modelId: string): number {
+  const sizeMB = MODEL_DOWNLOAD_SIZES_MB[modelId];
+  return sizeMB ? sizeMB * 1024 * 1024 : 0;
+}
 
 export function formatBytes(bytes: number): string {
   if (!bytes || bytes <= 0) return '0 B';
@@ -36,6 +62,8 @@ export function parseWorkerDownloadEvent(data: {
   file?: string;
   loaded?: number;
   total?: number;
+  activeLoaded?: number;
+  activeTotal?: number;
   filesDone?: number;
   filesTotal?: number;
   phase?: ModelDownloadProgressState['phase'];
@@ -47,6 +75,8 @@ export function parseWorkerDownloadEvent(data: {
     loaded: data.loaded ?? 0,
     total: data.total ?? 0,
     currentFile: data.file ?? '',
+    currentFileLoaded: data.activeLoaded ?? 0,
+    currentFileTotal: data.activeTotal ?? 0,
     filesDone: data.filesDone ?? 0,
     filesTotal: data.filesTotal ?? 0,
     phase: data.phase ?? 'download',
