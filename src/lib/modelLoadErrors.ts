@@ -21,7 +21,13 @@ export function parseModelLoadError(
   const lower = (error || '').toLowerCase();
   const type: ModelLoadErrorType =
     errorType ||
-    (lower.includes('array buffer allocation failed') || lower.includes('out of memory') || lower.includes('allocation failed') || lower.includes('aborted()') || lower.includes('-sassertions')
+    (/^\d{7,}$/.test(lower.trim()) ||
+      lower.includes('onnx runtime crashed') ||
+      lower.includes('array buffer allocation failed') ||
+      lower.includes('out of memory') ||
+      lower.includes('allocation failed') ||
+      lower.includes('aborted()') ||
+      lower.includes('-sassertions')
       ? 'memory'
       : lower.includes('could not locate file') || lower.includes('404') || lower.includes('invalid model id')
         ? 'unavailable'
@@ -78,18 +84,24 @@ export function parseModelLoadError(
       };
     case 'memory':
       return {
-        message: lower.includes('aborted()') ? 'Model runtime failed (WASM/WebGPU)' : 'Not enough browser memory',
-        reason: lower.includes('aborted()')
-          ? 'The ONNX runtime crashed while loading this model — usually too large for WASM or not enough RAM. Use Chrome/Edge (WebGPU), close other tabs, then try a smaller model: LaMini GPT 124M (~250 MB), Qwen 0.5B (~300 MB), or TinyLlama 1.1B (~650 MB).'
-          : 'This model is too large for your available RAM. Close other tabs and apps, then retry — or switch to a smaller model like LaMini GPT 124M (~250 MB), Qwen 0.5B (~300 MB), or TinyLlama 1.1B (~650 MB).',
+        message:
+          lower.includes('aborted()') || lower.includes('onnx runtime crashed') || /^\d{7,}$/.test(lower.trim())
+            ? 'Model runtime crashed (out of memory)'
+            : 'Not enough browser memory',
+        reason:
+          lower.includes('aborted()') || lower.includes('onnx runtime crashed') || /^\d{7,}$/.test(lower.trim())
+            ? 'The ONNX runtime crashed while loading this model — it is too large for your available RAM or WASM backend. Use Chrome/Edge with WebGPU, close other tabs, then try TinyLlama 1.1B (~650 MB), Qwen 0.5B (~300 MB), or LaMini GPT 124M (~250 MB).'
+            : 'This model is too large for your available RAM. Close other tabs and apps, then retry — or switch to a smaller model like LaMini GPT 124M (~250 MB), Qwen 0.5B (~300 MB), or TinyLlama 1.1B (~650 MB).',
         errorType: type,
         suggestModelLibrary: true,
       };
     default:
       return {
-        message: 'Model download failed',
-        reason: error || 'An unexpected error occurred.',
-        errorType: 'unknown',
+        message: /^\d{7,}$/.test(lower.trim()) ? 'Model runtime crashed (out of memory)' : 'Model download failed',
+        reason: /^\d{7,}$/.test(lower.trim())
+          ? 'The ONNX WebAssembly runtime crashed (internal error). This model is likely too large — try TinyLlama 1.1B, Qwen 0.5B, or LaMini GPT 124M in Chrome/Edge.'
+          : error || 'An unexpected error occurred.',
+        errorType: /^\d{7,}$/.test(lower.trim()) ? 'memory' : 'unknown',
         suggestModelLibrary: true,
       };
   }

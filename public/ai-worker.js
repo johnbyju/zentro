@@ -12,9 +12,9 @@ function configureOnnxRuntime() {
   env.backends.onnx.wasm.numThreads = 1;
   // Already inside a dedicated worker — no nested proxy needed
   env.backends.onnx.wasm.proxy = false;
-  // Explicit CDN paths so WASM never resolves to an HTML error page
+  // Must match transformers.js 3.5.2 bundled onnxruntime-web version (do NOT use 1.21.0)
   env.backends.onnx.wasm.wasmPaths =
-    'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.21.0/dist/';
+    'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0-dev.20250409-89f8206ba4/dist/';
 }
 
 configureOnnxRuntime();
@@ -98,7 +98,36 @@ function isMemoryError(err) {
 
 function isWasmRuntimeError(err) {
   const msg = err?.message || String(err || '');
-  return /aborted\(\)|build with -sassertions|no available backend|wasm.*failed|runtimeerror.*aborted|offset is out of bounds/i.test(msg);
+  if (/^\d{7,}$/.test(msg.trim())) return true;
+  if (typeof err === 'number') return true;
+  return /aborted\(\)|build with -sassertions|no available backend|wasm.*failed|runtimeerror.*aborted|offset is out of bounds|uncaught/i.test(msg);
+}
+
+function normalizeWorkerError(err) {
+  if (err == null) {
+    return { message: 'Unknown model load error', errorType: 'unknown' };
+  }
+
+  const raw = err?.message ?? err;
+  const msg = String(raw).trim();
+
+  if (/^\d{7,}$/.test(msg) || typeof err === 'number') {
+    return {
+      message: 'ONNX runtime crashed — model too large for available memory',
+      errorType: 'memory',
+    };
+  }
+
+  if (msg.includes('requires WebGPU')) {
+    return { message: msg, errorType: 'webgpu' };
+  }
+
+  return { message: msg || 'Model load failed', errorType: classifyLoadError(err) };
+}
+
+function postWorkerError(err) {
+  const { message, errorType } = normalizeWorkerError(err);
+  self.postMessage({ status: 'error', error: message, errorType });
 }
 
 function classifyLoadError(err) {
@@ -326,15 +355,22 @@ async function runGenerator(messages, opts) {
   }
 }
 
-// Catch OOM errors that escape the pipeline try/catch (e.g. inside progress read)
+// Catch WASM crashes that escape try/catch (numeric Emscripten errors, OOM, etc.)
 self.addEventListener('unhandledrejection', (event) => {
   if (!isLoading) return;
   const reason = event.reason;
   if (!isMemoryError(reason) && !isWasmRuntimeError(reason)) return;
   isLoading = false;
   generator = null;
-  const msg = reason?.message || String(reason);
-  self.postMessage({ status: 'error', error: msg, errorType: 'memory' });
+  postWorkerError(reason);
+  event.preventDefault();
+});
+
+self.addEventListener('error', (event) => {
+  if (!isLoading) return;
+  isLoading = false;
+  generator = null;
+  postWorkerError(event.error || event.message);
   event.preventDefault();
 });
 
@@ -415,7 +451,11 @@ self.addEventListener('message', async (event) => {
       }
 
       let lastError = null;
-      const devicesToTry = device === 'webgpu' ? ['webgpu', 'wasm'] : ['wasm'];
+      // Large / onnx-community models must not fall back to WASM — it always OOM-crashes
+      const wasmOk = sizeMB < 700 && !modelName.startsWith('onnx-community/');
+      const devicesToTry = device === 'webgpu'
+        ? (wasmOk ? ['webgpu', 'wasm'] : ['webgpu'])
+        : ['wasm'];
 
       outer: for (const dtype of dtypesToTry) {
         for (const tryDevice of devicesToTry) {
@@ -478,9 +518,7 @@ self.addEventListener('message', async (event) => {
       }
       isLoading = false;
       generator = null;
-      const msg = err?.message || String(err);
-      const errorType = classifyLoadError(err);
-      self.postMessage({ status: 'error', error: msg, errorType });
+      postWorkerError(err);
     }
   }
 

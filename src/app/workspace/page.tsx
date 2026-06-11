@@ -1349,7 +1349,8 @@ ${activeHtml}
                       ? 'MODEL UNAVAILABLE'
                       : errorPopup.message === 'WebGPU required for this model'
                         ? 'WEBGPU REQUIRED'
-                        : errorPopup.message === 'Model runtime failed (WASM/WebGPU)' ||
+                        : errorPopup.message === 'Model runtime crashed (out of memory)' ||
+                          errorPopup.message === 'Model runtime failed (WASM/WebGPU)' ||
                           errorPopup.message === 'Not enough browser memory'
                           ? 'OUT OF MEMORY'
                           : 'API QUOTA / RATE LIMIT'}
@@ -1379,7 +1380,8 @@ ${activeHtml}
                   <>Choose a different model from the <span className="text-[#6DD3FF] font-semibold">local model dropdown</span> at the top.</>
                 ) : errorPopup.message === 'WebGPU required for this model' ? (
                   <>Use Chrome 113+ or Edge 113+, or pick a smaller model from the dropdown.</>
-                ) : errorPopup.message === 'Model runtime failed (WASM/WebGPU)' ||
+                ) : errorPopup.message === 'Model runtime crashed (out of memory)' ||
+                  errorPopup.message === 'Model runtime failed (WASM/WebGPU)' ||
                   errorPopup.message === 'Not enough browser memory' ? (
                   <>Close other tabs, refresh, then pick a smaller model (LaMini 124M, Qwen 0.5B, or TinyLlama 1.1B).</>
                 ) : (
