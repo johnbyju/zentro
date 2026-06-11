@@ -4,7 +4,12 @@ import React, { useState, useEffect, useRef } from 'react';
 import { parseModelLoadError, type ModelLoadErrorType } from '@/lib/modelLoadErrors';
 import {
   INITIAL_MODEL_DOWNLOAD_PROGRESS,
+  LOCAL_MODEL_STORAGE_KEY,
+  clearLocalModelReady,
   getModelExpectedBytes,
+  getSavedLocalModelState,
+  getStoredHfToken,
+  markLocalModelReady,
   parseWorkerDownloadEvent,
   type ModelDownloadProgressState,
 } from '@/lib/modelDownloadProgress';
@@ -348,6 +353,7 @@ export default function AssistantPage() {
   const [localModelPercent, setLocalModelPercent] = useState(0);
   const [loadedModelId, setLoadedModelId] = useState<string | null>(null);
   const [downloadProgress, setDownloadProgress] = useState<ModelDownloadProgressState>(INITIAL_MODEL_DOWNLOAD_PROGRESS);
+  const [isRestoringModel, setIsRestoringModel] = useState(false);
 
   // Memories & Personas States
   const [memories, setMemories] = useState<string[]>([]);
@@ -411,14 +417,22 @@ export default function AssistantPage() {
     const savedActivePersona = localStorage.getItem('zentro-active-persona');
     if (savedActivePersona) setActivePersonaId(savedActivePersona);
 
-    const savedLocalModel = localStorage.getItem('zentro-local-model');
-    if (savedLocalModel) setLocalModelId(savedLocalModel);
+    const { modelId: savedLocalModel, wasReady: savedModelReady } = getSavedLocalModelState();
+    if (savedLocalModel) {
+      setLocalModelId(savedLocalModel);
+      if (savedModelReady) {
+        setLoadedModelId(savedLocalModel);
+        setLocalModelStatus('loading');
+        setLocalModelMsg('Restoring cached model...');
+        setIsRestoringModel(true);
+      }
+    }
 
     // Spawn Web Worker for local AI
     workerRef.current = new Worker('/ai-worker.js', { type: 'module' });
     
     workerRef.current.onmessage = (event) => {
-      const { status, message, progress, token, error, result, errorType } = event.data;
+      const { status, message, progress, token, error, result, errorType, model: readyModel } = event.data;
 
       if (status === 'loading') {
         setLocalModelStatus('loading');
@@ -444,11 +458,20 @@ export default function AssistantPage() {
         setLocalModelStatus('ready');
         setLocalModelMsg('Local AI Active — ready offline');
         setDownloadProgress(INITIAL_MODEL_DOWNLOAD_PROGRESS);
+        setIsRestoringModel(false);
+        const activeModel = readyModel || localStorage.getItem(LOCAL_MODEL_STORAGE_KEY);
+        if (activeModel) {
+          markLocalModelReady(activeModel);
+          setLoadedModelId(activeModel);
+          setLocalModelId(activeModel);
+        }
       } else if (status === 'complete') {
         handleLocalModelCompletion(result, pendingChatIdRef.current);
       } else if (status === 'error') {
         setLocalModelStatus('error');
         setDownloadProgress(INITIAL_MODEL_DOWNLOAD_PROGRESS);
+        setIsRestoringModel(false);
+        clearLocalModelReady();
         const info = parseModelLoadError(error || '', errorType as ModelLoadErrorType | undefined);
         setLocalModelMsg(info.message);
         setGenerationActive(false);
@@ -476,6 +499,21 @@ export default function AssistantPage() {
       }
     };
     window.addEventListener('keydown', handleKeyDown);
+
+    if (savedLocalModel && savedModelReady) {
+      const modelInfo = LOCAL_MODEL_LIBRARY.find((m) => m.id === savedLocalModel);
+      workerRef.current.postMessage({
+        type: 'load',
+        data: {
+          model: savedLocalModel,
+          expectedSizeMB: modelInfo?.sizeMB ?? Math.round(getModelExpectedBytes(savedLocalModel) / (1024 * 1024)),
+          restore: true,
+          useHfProxy: true,
+          token: getStoredHfToken(),
+          origin: window.location.origin,
+        },
+      });
+    }
 
     return () => {
       workerRef.current?.terminate();
@@ -575,9 +613,10 @@ export default function AssistantPage() {
 
   const handleLoadModel = (modelId: string) => {
     if (localModelStatus === 'loading' || localModelStatus === 'progress') return;
+    clearLocalModelReady();
     setLocalModelId(modelId);
     setLoadedModelId(modelId);
-    localStorage.setItem('zentro-local-model', modelId);
+    localStorage.setItem(LOCAL_MODEL_STORAGE_KEY, modelId);
     setShowModelLibrary(false);
     setLocalModelStatus('loading');
     setLocalModelMsg('Preparing model download...');
@@ -603,6 +642,7 @@ export default function AssistantPage() {
 
   const handleInitCurrentModel = () => {
     if (localModelStatus === 'ready' || localModelStatus === 'loading' || localModelStatus === 'progress') return;
+    clearLocalModelReady();
     if (!localModelId) {
       setShowModelLibrary(true);
       return;
@@ -1566,7 +1606,7 @@ export default function AssistantPage() {
       )}
 
       <ModelDownloadOverlay
-        visible={engineMode === 'local' && (localModelStatus === 'loading' || localModelStatus === 'progress')}
+        visible={engineMode === 'local' && !isRestoringModel && (localModelStatus === 'loading' || localModelStatus === 'progress')}
         modelName={selectedModelInfo?.name || localModelId.split('/').pop() || localModelId}
         progress={downloadProgress}
       />

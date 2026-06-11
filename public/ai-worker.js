@@ -114,24 +114,29 @@ function createDownloadTracker(expectedBytes = 0) {
     return expectedBytes > 0 ? Math.min(raw, expectedBytes) : raw;
   }
 
-  function getPercent(phase) {
-    if (phase === 'compile') return Math.max(lastPercent, 93);
-    if (phase === 'ready') return 100;
+  function isWeightsComplete() {
+    if (expectedBytes <= 0) {
+      return peakWeightBytes > 50 * 1024 * 1024 && !activeFile;
+    }
+    return getWeightBytes() >= expectedBytes * 0.85 || getDownloadedBytes() >= expectedBytes * 0.92;
+  }
 
-    const downloaded = getDownloadedBytes();
+  function getPercent(phase, compilePct) {
+    if (phase === 'ready') return 100;
+    if (phase === 'compile') return compilePct ?? Math.max(lastPercent, 93);
+
     if (expectedBytes > 0) {
-      // Reserve 8% for small files, 84% for weight download, cap at 92% until compile.
-      const smallPct = Math.min(8, filesDone * 1.5);
-      const weightPct = Math.min(84, (getWeightBytes() / expectedBytes) * 84);
-      return Math.min(92, Math.round(smallPct + weightPct));
+      const smallPct = Math.min(10, filesDone * 2);
+      const weightPct = Math.min(80, (getWeightBytes() / expectedBytes) * 80);
+      return Math.min(90, Math.round(smallPct + weightPct));
     }
 
     if (activeTotal > activeLoaded && activeTotal > 0) {
-      return Math.min(92, Math.round((activeLoaded / activeTotal) * 92));
+      return Math.min(90, Math.round((activeLoaded / activeTotal) * 90));
     }
 
     if (seenFiles.size > 0) {
-      return Math.min(92, Math.round((filesDone / seenFiles.size) * 92));
+      return Math.min(90, Math.round((filesDone / seenFiles.size) * 90));
     }
 
     return 0;
@@ -158,9 +163,9 @@ function createDownloadTracker(expectedBytes = 0) {
     return shortFile ? `Downloading ${shortFile}` : 'Downloading model files...';
   }
 
-  function postProgress(phase, messageOverride) {
+  function postProgress(phase, messageOverride, compilePct) {
     const now = Date.now();
-    const percent = getPercent(phase);
+    const percent = getPercent(phase, compilePct);
 
     if (phase === 'download' && now - lastPostAt < 120 && percent === lastPercent) {
       return;
@@ -172,11 +177,11 @@ function createDownloadTracker(expectedBytes = 0) {
     self.postMessage({
       status: 'progress',
       progress: percent,
-      file: activeFile,
+      file: phase === 'compile' ? '' : activeFile,
       loaded: downloaded,
       total: expectedBytes,
-      activeLoaded,
-      activeTotal,
+      activeLoaded: phase === 'compile' ? 0 : activeLoaded,
+      activeTotal: phase === 'compile' ? 0 : activeTotal,
       filesDone,
       filesTotal: seenFiles.size,
       phase,
@@ -185,6 +190,7 @@ function createDownloadTracker(expectedBytes = 0) {
   }
 
   return {
+    isWeightsComplete,
     handle(info) {
       const filename = info.file || info.name || '';
       if (!filename) return;
@@ -235,8 +241,8 @@ function createDownloadTracker(expectedBytes = 0) {
         postProgress('download');
       }
     },
-    markCompile() {
-      postProgress('compile');
+    markCompile(compilePct) {
+      postProgress('compile', undefined, compilePct);
     },
     reset() {
       smallBytesDone = 0;
@@ -333,20 +339,39 @@ self.addEventListener('message', async (event) => {
     }
 
     if (generator && currentModelName === modelName) {
-      self.postMessage({ status: 'ready', message: 'Local AI ready (cached)!' });
+      self.postMessage({ status: 'ready', message: 'Local AI ready (cached)!', model: modelName });
       return;
     }
 
     isLoading = true;
     generator = null;
+    let compileInterval = null;
 
     try {
       const shortName = modelName.split('/').pop();
-      self.postMessage({ status: 'loading', message: `Preparing ${shortName}...` });
+      const isRestore = data?.restore === true;
+      self.postMessage({
+        status: 'loading',
+        message: isRestore ? `Restoring ${shortName} from cache...` : `Preparing ${shortName}...`,
+      });
 
       const downloadTracker = createDownloadTracker(expectedBytes);
+      let compilePct = 93;
+
+      const startCompileHeartbeat = () => {
+        if (compileInterval) return;
+        downloadTracker.markCompile(compilePct);
+        compileInterval = setInterval(() => {
+          compilePct = Math.min(98, compilePct + 1);
+          downloadTracker.markCompile(compilePct);
+        }, 1200);
+      };
+
       const progressCallback = (info) => {
         downloadTracker.handle(info);
+        if (downloadTracker.isWeightsComplete()) {
+          startCompileHeartbeat();
+        }
       };
 
       const dtypesToTry = getDtypesToTry(expectedBytes);
@@ -354,6 +379,11 @@ self.addEventListener('message', async (event) => {
       for (const dtype of dtypesToTry) {
         try {
           downloadTracker.reset();
+          compilePct = 93;
+          if (compileInterval) {
+            clearInterval(compileInterval);
+            compileInterval = null;
+          }
           self.postMessage({ status: 'loading', message: `Loading (${dtype})...` });
           generator = await pipeline('text-generation', modelName, {
             progress_callback: progressCallback,
@@ -369,9 +399,14 @@ self.addEventListener('message', async (event) => {
         }
       }
 
+      if (compileInterval) {
+        clearInterval(compileInterval);
+        compileInterval = null;
+      }
+
       if (!generator) throw lastError || new Error('All formats failed');
 
-      downloadTracker.markCompile();
+      downloadTracker.markCompile(99);
       self.postMessage({
         status: 'progress',
         progress: 100,
@@ -388,9 +423,13 @@ self.addEventListener('message', async (event) => {
 
       currentModelName = modelName;
       isLoading = false;
-      self.postMessage({ status: 'ready', message: `${shortName} ready — fully offline!` });
+      self.postMessage({ status: 'ready', message: `${shortName} ready — fully offline!`, model: modelName });
 
     } catch (err) {
+      if (compileInterval) {
+        clearInterval(compileInterval);
+        compileInterval = null;
+      }
       isLoading = false;
       generator = null;
       const msg = err?.message || String(err);

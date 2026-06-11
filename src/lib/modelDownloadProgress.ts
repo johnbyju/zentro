@@ -11,6 +11,33 @@ export interface ModelDownloadProgressState {
   message: string;
 }
 
+export const LOCAL_MODEL_STORAGE_KEY = 'zentro-local-model';
+export const LOCAL_MODEL_READY_KEY = 'zentro-local-model-ready';
+
+export function getSavedLocalModelState(): { modelId: string | null; wasReady: boolean } {
+  if (typeof window === 'undefined') {
+    return { modelId: null, wasReady: false };
+  }
+  return {
+    modelId: localStorage.getItem(LOCAL_MODEL_STORAGE_KEY),
+    wasReady: localStorage.getItem(LOCAL_MODEL_READY_KEY) === 'true',
+  };
+}
+
+export function markLocalModelReady(modelId: string) {
+  localStorage.setItem(LOCAL_MODEL_STORAGE_KEY, modelId);
+  localStorage.setItem(LOCAL_MODEL_READY_KEY, 'true');
+}
+
+export function clearLocalModelReady() {
+  localStorage.removeItem(LOCAL_MODEL_READY_KEY);
+}
+
+export function getStoredHfToken(): string {
+  if (typeof window === 'undefined') return '';
+  return localStorage.getItem('zentro-key-huggingface') || '';
+}
+
 export const INITIAL_MODEL_DOWNLOAD_PROGRESS: ModelDownloadProgressState = {
   percent: 0,
   loaded: 0,

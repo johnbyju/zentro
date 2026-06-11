@@ -34,8 +34,12 @@ export default function ModelDownloadOverlay({
       ? `${formatBytes(displayLoaded)} downloaded`
       : 'Starting download...';
 
+  const isCompiling =
+    progress.phase === 'compile' ||
+    (hasExpectedTotal && progress.total > 0 && displayLoaded >= progress.total * 0.95 && progress.percent >= 88);
+
   const currentFileLabel = (() => {
-    if (progress.phase === 'compile') return null;
+    if (isCompiling) return null;
     if (!shortFile) return null;
     if (progress.currentFileTotal > progress.currentFileLoaded) {
       return `${shortFile} · ${formatBytes(progress.currentFileLoaded)} / ${formatBytes(progress.currentFileTotal)}`;
@@ -46,17 +50,15 @@ export default function ModelDownloadOverlay({
     return shortFile;
   })();
 
-  const phaseLabel =
-    progress.phase === 'compile'
-      ? 'Compiling model for WebGPU...'
-      : progress.phase === 'ready'
-        ? 'Model ready'
-        : shortFile
-          ? `Downloading ${shortFile}`
-          : 'Downloading model files...';
+  const phaseLabel = isCompiling
+    ? 'Compiling model for WebGPU...'
+    : progress.phase === 'ready'
+      ? 'Model ready'
+      : shortFile
+        ? `Downloading ${shortFile}`
+        : 'Downloading model files...';
 
-  const hint =
-    progress.phase === 'compile'
+  const hint = isCompiling
       ? 'Weights are cached. This step prepares the model for local inference.'
       : hasExpectedTotal
         ? 'Large weight files can take several minutes. Keep this tab open.'
@@ -78,7 +80,7 @@ export default function ModelDownloadOverlay({
         <div className="p-6 flex flex-col gap-4">
           <div className="flex items-start gap-3">
             <div className="w-10 h-10 rounded-xl bg-[#3D5CFF]/10 border border-[#3D5CFF]/25 flex items-center justify-center shrink-0">
-              {progress.phase === 'compile' || progress.phase === 'ready' ? (
+              {isCompiling || progress.phase === 'ready' ? (
                 <Loader2 size={18} className="text-[#6DD3FF] animate-spin" />
               ) : (
                 <Cpu size={18} className="text-[#6DD3FF]" />

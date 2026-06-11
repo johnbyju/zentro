@@ -4,7 +4,12 @@ import React, { useState, useEffect, useRef } from 'react';
 import { parseModelLoadError, type ModelLoadErrorType } from '@/lib/modelLoadErrors';
 import {
   INITIAL_MODEL_DOWNLOAD_PROGRESS,
+  LOCAL_MODEL_STORAGE_KEY,
+  clearLocalModelReady,
   getModelExpectedBytes,
+  getSavedLocalModelState,
+  getStoredHfToken,
+  markLocalModelReady,
   parseWorkerDownloadEvent,
   type ModelDownloadProgressState,
 } from '@/lib/modelDownloadProgress';
@@ -66,7 +71,10 @@ export default function WorkspacePage() {
   const [engineMode, setEngineMode] = useState<'server' | 'local'>('local');
   const [generationActive, setGenerationActive] = useState(false);
   const [serverModel, setServerModel] = useState('gemini-2.5-flash');
-  const [localModel, setLocalModel] = useState('Xenova/TinyLlama-1.1B-Chat-v1.0');
+  const [localModel, setLocalModel] = useState(() => {
+    if (typeof window === 'undefined') return 'Xenova/TinyLlama-1.1B-Chat-v1.0';
+    return localStorage.getItem(LOCAL_MODEL_STORAGE_KEY) || 'Xenova/TinyLlama-1.1B-Chat-v1.0';
+  });
 
   // Monaco and Sandbox code content
   const [activeHtml, setActiveHtml] = useState('<!-- Enter or generate app layout -->\n<div class="hello"><h1>Zentro Core Ready</h1><p>Start a new chat or run code snippets.</p></div>');
@@ -87,6 +95,7 @@ export default function WorkspacePage() {
   const [localModelMsg, setLocalModelMsg] = useState('Click to Download & Run Locally');
   const [localModelPercent, setLocalModelPercent] = useState(0);
   const [downloadProgress, setDownloadProgress] = useState<ModelDownloadProgressState>(INITIAL_MODEL_DOWNLOAD_PROGRESS);
+  const [isRestoringModel, setIsRestoringModel] = useState(false);
 
   const workerRef = useRef<Worker | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -181,11 +190,21 @@ export default function WorkspacePage() {
         .catch((err) => console.error('Service Worker registration failed:', err));
     }
 
+    const { modelId: savedLocalModel, wasReady: savedModelReady } = getSavedLocalModelState();
+    if (savedLocalModel) {
+      setLocalModel(savedLocalModel);
+      if (savedModelReady) {
+        setLocalModelStatus('loading');
+        setLocalModelMsg('Restoring cached model...');
+        setIsRestoringModel(true);
+      }
+    }
+
     // Spawn AI Worker (must be type:module to support ES module imports in the worker)
     workerRef.current = new Worker('/ai-worker.js', { type: 'module' });
 
     workerRef.current.onmessage = (event) => {
-      const { status, message, progress, token, error, result, pass, data, errorType } = event.data;
+      const { status, message, progress, token, error, result, pass, data, errorType, model: readyModel } = event.data;
 
       if (status === 'loading') {
         setLocalModelStatus('loading');
@@ -211,6 +230,12 @@ export default function WorkspacePage() {
         setLocalModelStatus('ready');
         setLocalModelMsg('Local AI Active (Ready offline)');
         setDownloadProgress(INITIAL_MODEL_DOWNLOAD_PROGRESS);
+        setIsRestoringModel(false);
+        const activeModel = readyModel || localStorage.getItem(LOCAL_MODEL_STORAGE_KEY);
+        if (activeModel) {
+          markLocalModelReady(activeModel);
+          setLocalModel(activeModel);
+        }
       } else if (status === 'pass_start') {
         setPipelinePass(pass);
         setPipelineStatus(prev => ({ ...prev, [pass]: 'running' }));
@@ -245,12 +270,28 @@ export default function WorkspacePage() {
       } else if (status === 'error') {
         setLocalModelStatus('error');
         setDownloadProgress(INITIAL_MODEL_DOWNLOAD_PROGRESS);
+        setIsRestoringModel(false);
+        clearLocalModelReady();
         const info = parseModelLoadError(error || '', errorType as ModelLoadErrorType | undefined);
         setLocalModelMsg(info.message);
         setGenerationActive(false);
         showError(info.message, info.reason);
       }
     };
+
+    if (savedLocalModel && savedModelReady) {
+      workerRef.current.postMessage({
+        type: 'load',
+        data: {
+          model: savedLocalModel,
+          expectedSizeMB: Math.round(getModelExpectedBytes(savedLocalModel) / (1024 * 1024)) || 0,
+          restore: true,
+          useHfProxy: true,
+          token: getStoredHfToken(),
+          origin: window.location.origin,
+        },
+      });
+    }
 
     // Catch worker-level errors (import failures, syntax errors, etc)
     workerRef.current.onerror = (err) => {
@@ -326,6 +367,8 @@ export default function WorkspacePage() {
   const handleLocalModelChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newModel = e.target.value;
     setLocalModel(newModel);
+    localStorage.setItem(LOCAL_MODEL_STORAGE_KEY, newModel);
+    clearLocalModelReady();
     setLocalModelStatus('idle');
     setLocalModelMsg('Click to Download & Run Locally');
     setLocalModelPercent(0);
@@ -334,6 +377,7 @@ export default function WorkspacePage() {
   // Launch Local Model weight downloader
   const handleInitLocalModel = () => {
     if (localModelStatus === 'ready' || localModelStatus === 'loading' || localModelStatus === 'progress') return;
+    clearLocalModelReady();
     setLocalModelPercent(0);
     setDownloadProgress({
       ...INITIAL_MODEL_DOWNLOAD_PROGRESS,
@@ -1205,7 +1249,7 @@ ${activeHtml}
       )}
 
       <ModelDownloadOverlay
-        visible={engineMode === 'local' && (localModelStatus === 'loading' || localModelStatus === 'progress')}
+        visible={engineMode === 'local' && !isRestoringModel && (localModelStatus === 'loading' || localModelStatus === 'progress')}
         modelName={localModel.split('/').pop() || localModel}
         progress={downloadProgress}
       />
