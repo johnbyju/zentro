@@ -347,7 +347,14 @@ export default function AssistantPage() {
   const [promptInput, setPromptInput] = useState('');
   
   // Model & Engine Configuration
-  const [engineMode, setEngineMode] = useState<'server' | 'local'>('local');
+  const [engineMode, setEngineMode] = useState<'server' | 'local'>(() => {
+    if (typeof window === 'undefined') return 'local';
+    return (localStorage.getItem('zentro-engine-mode') as 'server' | 'local') || 'local';
+  });
+  const engineModeRef = useRef(engineMode);
+  useEffect(() => {
+    engineModeRef.current = engineMode;
+  }, [engineMode]);
   const [serverModel, setServerModel] = useState('gemini-2.5-flash');
   const [localModelId, setLocalModelId] = useState('Xenova/TinyLlama-1.1B-Chat-v1.0');
   const [generationActive, setGenerationActive] = useState(false);
@@ -507,13 +514,15 @@ export default function AssistantPage() {
         const info = parseModelLoadError(error || '', errorType as ModelLoadErrorType | undefined);
         setLocalModelMsg(info.message);
         setGenerationActive(false);
-        setErrorPopup({ visible: true, message: info.message, reason: info.reason });
-        if (errorDismissRef.current) clearTimeout(errorDismissRef.current);
-        errorDismissRef.current = setTimeout(() => {
-          setErrorPopup({ visible: false, message: '' });
-        }, 10000);
-        if (info.suggestModelLibrary) {
-          setShowModelLibrary(true);
+        if (engineModeRef.current === 'local') {
+          setErrorPopup({ visible: true, message: info.message, reason: info.reason });
+          if (errorDismissRef.current) clearTimeout(errorDismissRef.current);
+          errorDismissRef.current = setTimeout(() => {
+            setErrorPopup({ visible: false, message: '' });
+          }, 10000);
+          if (info.suggestModelLibrary) {
+            setShowModelLibrary(true);
+          }
         }
       }
     };
@@ -532,7 +541,7 @@ export default function AssistantPage() {
     };
     window.addEventListener('keydown', handleKeyDown);
 
-    if (savedLocalModel && savedModelReady) {
+    if (savedLocalModel && savedModelReady && engineModeRef.current === 'local') {
       const modelInfo = LOCAL_MODEL_LIBRARY.find((m) => m.id === savedLocalModel);
       workerRef.current.postMessage({
         type: 'load',
@@ -659,6 +668,7 @@ export default function AssistantPage() {
       total: getModelExpectedBytes(modelId),
     });
     setEngineMode('local');
+    localStorage.setItem('zentro-engine-mode', 'local');
     const userHfToken = apiKeys['huggingface'] || '';
     workerRef.current?.postMessage({
       type: 'load',
@@ -944,7 +954,10 @@ export default function AssistantPage() {
           {/* Mode Switcher */}
           <div className="flex items-center rounded-lg p-1 border border-white/[0.06] bg-[#070914] text-xs font-semibold">
             <button
-              onClick={() => setEngineMode('server')}
+              onClick={() => {
+                setEngineMode('server');
+                localStorage.setItem('zentro-engine-mode', 'server');
+              }}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-all ${
                 engineMode === 'server' 
                   ? 'bg-[#3D5CFF] text-white shadow-md' 
@@ -954,7 +967,10 @@ export default function AssistantPage() {
               <Server size={12} /> Server
             </button>
             <button
-              onClick={() => setEngineMode('local')}
+              onClick={() => {
+                setEngineMode('local');
+                localStorage.setItem('zentro-engine-mode', 'local');
+              }}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-all ${
                 engineMode === 'local' 
                   ? 'bg-[#3D5CFF] text-white shadow-md' 

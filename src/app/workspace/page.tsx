@@ -73,7 +73,14 @@ export default function WorkspacePage() {
   const [themeMode, setThemeMode] = useState<'dark' | 'light'>('dark');
 
   // Generator engine state
-  const [engineMode, setEngineMode] = useState<'server' | 'local'>('local');
+  const [engineMode, setEngineMode] = useState<'server' | 'local'>(() => {
+    if (typeof window === 'undefined') return 'local';
+    return (localStorage.getItem('zentro-engine-mode') as 'server' | 'local') || 'local';
+  });
+  const engineModeRef = useRef(engineMode);
+  useEffect(() => {
+    engineModeRef.current = engineMode;
+  }, [engineMode]);
   const [generationActive, setGenerationActive] = useState(false);
   const [serverModel, setServerModel] = useState('gemini-2.5-flash');
   const [localModel, setLocalModel] = useState(() => {
@@ -306,11 +313,13 @@ export default function WorkspacePage() {
         const info = parseModelLoadError(error || '', errorType as ModelLoadErrorType | undefined);
         setLocalModelMsg(info.message);
         setGenerationActive(false);
-        showError(info.message, info.reason);
+        if (engineModeRef.current === 'local') {
+          showError(info.message, info.reason);
+        }
       }
     };
 
-    if (savedLocalModel && savedModelReady) {
+    if (savedLocalModel && savedModelReady && engineModeRef.current === 'local') {
       workerRef.current.postMessage({
         type: 'load',
         data: {
@@ -785,7 +794,10 @@ ${activeHtml}
           {/* Mode Switcher */}
           <div className={`flex items-center rounded-lg p-1 border text-xs font-semibold ${themeMode === 'dark' ? 'bg-slate-900/60 border-slate-800' : 'bg-slate-100 border-slate-200'}`}>
             <button
-              onClick={() => setEngineMode('server')}
+              onClick={() => {
+                setEngineMode('server');
+                localStorage.setItem('zentro-engine-mode', 'server');
+              }}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-all ${engineMode === 'server'
                   ? 'bg-indigo-600 text-white shadow-sm'
                   : 'text-slate-400 hover:text-slate-200'
@@ -796,6 +808,7 @@ ${activeHtml}
             <button
               onClick={() => {
                 setEngineMode('local');
+                localStorage.setItem('zentro-engine-mode', 'local');
                 if (localModelStatus === 'idle') {
                   setShowLocalModelOnboarding(true);
                 }
