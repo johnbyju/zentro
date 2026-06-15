@@ -11,7 +11,11 @@ import {
   getStoredHfToken,
   markLocalModelReady,
   parseWorkerDownloadEvent,
+  formatBytes,
+  getCachedModelsList,
+  deleteModelFromCache,
   type ModelDownloadProgressState,
+  type CachedModelInfo,
 } from '@/lib/modelDownloadProgress';
 import ModelDownloadOverlay from '@/components/ModelDownloadOverlay';
 import Link from 'next/link';
@@ -386,6 +390,33 @@ export default function AssistantPage() {
   const [modelSearchQuery, setModelSearchQuery] = useState('');
   const [modelCategoryFilter, setModelCategoryFilter] = useState<string>('all');
   const [modelFamilyFilter, setModelFamilyFilter] = useState<string>('all');
+  const [cachedModels, setCachedModels] = useState<CachedModelInfo[]>([]);
+
+  const refreshCachedModelsList = async () => {
+    const list = await getCachedModelsList();
+    setCachedModels(list);
+  };
+
+  const handleDeleteModelCache = async (modelId: string) => {
+    if (confirm(`Are you sure you want to clear the cached files for ${modelId}? This will delete it from your browser cache.`)) {
+      const success = await deleteModelFromCache(modelId);
+      if (success) {
+        if (loadedModelId === modelId) {
+          clearLocalModelReady();
+          setLocalModelStatus('idle');
+          setLocalModelMsg('No model loaded — click "Choose Model" to select one');
+          setLoadedModelId(null);
+        }
+        await refreshCachedModelsList();
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (showModelLibrary) {
+      refreshCachedModelsList();
+    }
+  }, [showModelLibrary]);
 
   const workerRef = useRef<Worker | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -1480,6 +1511,34 @@ export default function AssistantPage() {
 
             {/* Model Grid */}
             <div className="overflow-y-auto flex-1 p-6">
+              {cachedModels.length > 0 && (
+                <div className="mb-6 p-4 rounded-xl border border-white/[0.06] bg-[#070914]/50 flex flex-col gap-3">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+                      <ShieldCheck size={13} className="text-emerald-450" />
+                      Cached Models in Browser Storage
+                    </h3>
+                    <span className="text-[10px] text-slate-500">Stored locally & ready offline</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    {cachedModels.map(cm => (
+                      <div key={cm.id} className="flex items-center justify-between p-2.5 rounded-lg border border-white/[0.04] bg-[#0b0c18] text-xs">
+                        <div className="flex flex-col min-w-0 pr-2">
+                          <span className="font-bold text-slate-200 truncate" title={cm.id}>{cm.id}</span>
+                          <span className="text-[9px] text-slate-500 font-mono mt-0.5">{cm.filesCount} files · {cm.totalSize > 0 ? formatBytes(cm.totalSize) : `${(getModelExpectedBytes(cm.id) / (1024 * 1024)).toFixed(0)} MB`}</span>
+                        </div>
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); handleDeleteModelCache(cm.id); }}
+                          className="px-2 py-1 bg-red-950/20 hover:bg-red-950/40 border border-red-900/30 hover:border-red-800/40 text-red-400 hover:text-red-300 text-[10px] font-semibold rounded transition-all flex items-center gap-1 shrink-0"
+                        >
+                          <Trash2 size={11} /> Clear Cache
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {filteredModels.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-16 text-slate-500">
                   <Package size={40} className="opacity-20 mb-3" />

@@ -26,6 +26,7 @@ export function parseModelLoadError(
       lower.includes('array buffer allocation failed') ||
       lower.includes('out of memory') ||
       lower.includes('allocation failed') ||
+      lower.includes('failed to allocate') ||
       lower.includes('aborted()') ||
       lower.includes('-sassertions')
       ? 'memory'

@@ -110,3 +110,91 @@ export function parseWorkerDownloadEvent(data: {
     message: data.message ?? 'Downloading model files...',
   };
 }
+
+export interface CachedModelInfo {
+  id: string;
+  filesCount: number;
+  totalSize: number;
+}
+
+export async function getCachedModelsList(): Promise<CachedModelInfo[]> {
+  if (typeof window === 'undefined') return [];
+  try {
+    const cacheNames = await caches.keys();
+    const modelMap: Record<string, { filesCount: number; totalSize: number }> = {};
+
+    for (const cacheName of cacheNames) {
+      if (!cacheName.toLowerCase().includes('huggingface') && !cacheName.toLowerCase().includes('transformers')) {
+        continue;
+      }
+      try {
+        const cache = await caches.open(cacheName);
+        const requests = await cache.keys();
+        for (const req of requests) {
+          const urlStr = req.url;
+          let match = urlStr.match(/(?:huggingface\.co|api\/huggingface)\/(.*?)\/resolve\/main\//);
+          if (match && match[1]) {
+            const modelId = match[1];
+            if (!modelMap[modelId]) {
+              modelMap[modelId] = { filesCount: 0, totalSize: 0 };
+            }
+            modelMap[modelId].filesCount += 1;
+            try {
+              const res = await cache.match(req);
+              if (res) {
+                const len = res.headers.get('content-length');
+                if (len) {
+                  modelMap[modelId].totalSize += parseInt(len, 10);
+                }
+              }
+            } catch (err) {
+              console.error('Error reading cache response header:', err);
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Error scanning cache:', err);
+      }
+    }
+
+    return Object.entries(modelMap).map(([id, data]) => ({
+      id,
+      filesCount: data.filesCount,
+      totalSize: data.totalSize,
+    }));
+  } catch (e) {
+    console.error('Failed to get cache list:', e);
+    return [];
+  }
+}
+
+export async function deleteModelFromCache(modelId: string): Promise<boolean> {
+  if (typeof window === 'undefined') return false;
+  try {
+    const cacheNames = await caches.keys();
+    let deletedAny = false;
+
+    for (const cacheName of cacheNames) {
+      if (!cacheName.toLowerCase().includes('huggingface') && !cacheName.toLowerCase().includes('transformers')) {
+        continue;
+      }
+      try {
+        const cache = await caches.open(cacheName);
+        const requests = await cache.keys();
+        for (const req of requests) {
+          const urlStr = req.url;
+          if (urlStr.includes(`/${modelId}/resolve/`)) {
+            await cache.delete(req);
+            deletedAny = true;
+          }
+        }
+      } catch (err) {
+        console.error('Error deleting from cache:', err);
+      }
+    }
+    return deletedAny;
+  } catch (e) {
+    console.error('Failed to delete from cache:', e);
+    return false;
+  }
+}

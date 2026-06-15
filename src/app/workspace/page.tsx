@@ -11,7 +11,11 @@ import {
   getStoredHfToken,
   markLocalModelReady,
   parseWorkerDownloadEvent,
+  formatBytes,
+  getCachedModelsList,
+  deleteModelFromCache,
   type ModelDownloadProgressState,
+  type CachedModelInfo,
 } from '@/lib/modelDownloadProgress';
 import ModelDownloadOverlay from '@/components/ModelDownloadOverlay';
 import JSZip from 'jszip';
@@ -43,7 +47,8 @@ import {
   Eye,
   EyeOff,
   Check,
-  ExternalLink
+  ExternalLink,
+  ShieldCheck
 } from 'lucide-react';
 import {
   db,
@@ -109,6 +114,32 @@ export default function WorkspacePage() {
   const [showLocalModelOnboarding, setShowLocalModelOnboarding] = useState(false);
   const [apiKeyTab, setApiKeyTab] = useState<'gemini' | 'groq' | 'openrouter' | 'huggingface'>('gemini');
   const [apiKeyInput, setApiKeyInput] = useState('');
+  const [cachedModels, setCachedModels] = useState<CachedModelInfo[]>([]);
+
+  const refreshCachedModelsList = async () => {
+    const list = await getCachedModelsList();
+    setCachedModels(list);
+  };
+
+  const handleDeleteModelCache = async (modelId: string) => {
+    if (confirm(`Are you sure you want to clear the cached files for ${modelId}? This will delete it from your browser cache.`)) {
+      const success = await deleteModelFromCache(modelId);
+      if (success) {
+        if (localModel === modelId) {
+          clearLocalModelReady();
+          setLocalModelStatus('idle');
+          setLocalModelMsg('Click to Download & Run Locally');
+        }
+        await refreshCachedModelsList();
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (showLocalModelOnboarding) {
+      refreshCachedModelsList();
+    }
+  }, [showLocalModelOnboarding]);
   const [showApiKeyValue, setShowApiKeyValue] = useState(false);
   const [apiKeys, setApiKeys] = useState<Record<string, string>>({});
   const [apiKeySaved, setApiKeySaved] = useState(false);
@@ -1292,6 +1323,31 @@ ${activeHtml}
                   <option value="Xenova/LaMini-GPT-124M">LaMini GPT 124M (Fastest ~250MB)</option>
                 </select>
               </div>
+
+              {cachedModels.length > 0 && (
+                <div className="flex flex-col gap-2 rounded-xl bg-[#070914] border border-white/[0.04] p-3">
+                  <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                    <ShieldCheck size={12} className="text-emerald-450" />
+                    <span>Cached offline models</span>
+                  </div>
+                  <div className="flex flex-col gap-2 max-h-[120px] overflow-y-auto pr-1">
+                    {cachedModels.map(cm => (
+                      <div key={cm.id} className="flex items-center justify-between py-1 border-b border-white/[0.02] last:border-0 text-xxs">
+                        <div className="flex flex-col min-w-0 pr-2">
+                          <span className="font-bold text-slate-300 truncate" title={cm.id}>{cm.id}</span>
+                          <span className="text-[9px] text-slate-500 font-mono mt-0.5">{cm.filesCount} files · {cm.totalSize > 0 ? formatBytes(cm.totalSize) : `${(getModelExpectedBytes(cm.id) / (1024 * 1024)).toFixed(0)} MB`}</span>
+                        </div>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleDeleteModelCache(cm.id); }}
+                          className="px-2 py-1 bg-red-950/20 hover:bg-red-950/40 border border-red-900/30 hover:border-red-800/40 text-red-400 hover:text-red-300 text-[9px] font-semibold rounded transition-all flex items-center gap-1 shrink-0"
+                        >
+                          <Trash2 size={10} /> Clear
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <div className="rounded-xl bg-indigo-950/20 border border-indigo-850/30 p-3.5 flex flex-col gap-2 text-xxs text-slate-400">
                 <div className="flex items-center gap-1.5 font-bold text-indigo-300">
