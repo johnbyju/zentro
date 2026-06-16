@@ -96,25 +96,6 @@ const LOCAL_MODEL_LIBRARY: LocalModelInfo[] = [
     badge: '⚡ Fastest'
   },
   {
-    id: 'Xenova/gpt2',
-    name: 'GPT-2 Base',
-    family: 'GPT-2',
-    category: 'tiny',
-    sizeMB: 250,
-    description: 'Classic OpenAI GPT-2 base model. Great for creative writing and simple completions.',
-    tags: ['Classic', 'Creative', 'Fast'],
-  },
-  {
-    id: 'Xenova/distilgpt2',
-    name: 'DistilGPT-2',
-    family: 'GPT-2',
-    category: 'tiny',
-    sizeMB: 170,
-    description: 'Distilled version of GPT-2 — 40% smaller and 60% faster with 97% of the quality.',
-    tags: ['Distilled', 'Minimal', 'Offline'],
-    badge: '🪶 Lightest'
-  },
-  {
     id: 'Xenova/Qwen1.5-0.5B-Chat',
     name: 'Qwen 1.5 0.5B Chat',
     family: 'Qwen',
@@ -146,54 +127,17 @@ const LOCAL_MODEL_LIBRARY: LocalModelInfo[] = [
     tags: ['Qwen', 'Chat', 'Balanced'],
   },
   {
-    id: 'Xenova/opt-350m',
-    name: 'OPT 350M',
-    family: 'OPT',
-    category: 'small',
-    sizeMB: 350,
-    description: 'Meta\'s Open Pre-trained Transformer 350M. Great balance of speed and reasoning depth.',
-    tags: ['Meta', 'OPT', 'Reasoning'],
-  },
-  {
-    id: 'Felladrin/onnx-Llama-160M-Chat-v1',
-    name: 'LLaMA 160M Chat',
+    id: 'Xenova/LLaMA-3.2-1B-Instruct',
+    name: 'LLaMA 3.2 1B Instruct',
     family: 'LLaMA',
-    category: 'tiny',
-    sizeMB: 210,
-    description: 'Compact LLaMA chat model with full instruction following. Ideal for low-RAM devices.',
-    tags: ['LLaMA', 'Chat', 'Compact'],
-  },
-  {
-    id: 'Xenova/bloom-560m',
-    name: 'BLOOM 560M',
-    family: 'BLOOM',
     category: 'small',
-    sizeMB: 560,
-    description: 'BigScience BLOOM 560M — multilingual model supporting 46 languages and 13 programming languages.',
-    tags: ['Multilingual', 'BigScience', 'Multilanguage'],
-    badge: '🌍 Multilingual'
-  },
-  {
-    id: 'Xenova/pythia-410m',
-    name: 'Pythia 410M',
-    family: 'Pythia',
-    category: 'small',
-    sizeMB: 410,
-    description: 'EleutherAI Pythia 410M — great for code understanding and technical Q&A.',
-    tags: ['EleutherAI', 'Code', 'Technical'],
+    sizeMB: 1000,
+    description: 'Meta LLaMA 3.2 1B — latest generation LLaMA. Dramatically improved reasoning and instruction following.',
+    tags: ['Meta', 'LLaMA 3', 'Instruct'],
+    badge: '🆕 Latest LLaMA'
   },
 
   // ── Medium (700MB–2GB) ────────────────────────────────────────────────────
-  {
-    id: 'Xenova/Phi-3-mini-4k-instruct',
-    name: 'Phi-3 Mini 4K',
-    family: 'Phi',
-    category: 'medium',
-    sizeMB: 2300,
-    description: 'Microsoft Phi-3 Mini — state-of-the-art small model. Exceptionally capable for coding and analysis.',
-    tags: ['Microsoft', 'Phi-3', 'SOTA'],
-    badge: '🏆 Top Quality'
-  },
   {
     id: 'onnx-community/Qwen2.5-1.5B-Instruct',
     name: 'Qwen 2.5 1.5B Instruct',
@@ -205,24 +149,16 @@ const LOCAL_MODEL_LIBRARY: LocalModelInfo[] = [
     badge: '🎮 WebGPU'
   },
   {
-    id: 'Xenova/falcon-rw-1b',
-    name: 'Falcon RW 1B',
-    family: 'Falcon',
+    id: 'Xenova/Phi-3-mini-4k-instruct',
+    name: 'Phi-3 Mini 4K',
+    family: 'Phi',
     category: 'medium',
-    sizeMB: 1000,
-    description: 'TII UAE Falcon 1B refined web model. Known for strong text generation quality.',
-    tags: ['TII', 'Falcon', 'Text Gen'],
+    sizeMB: 2300,
+    description: 'Microsoft Phi-3 Mini — state-of-the-art small model. Exceptionally capable for coding and analysis.',
+    tags: ['Microsoft', 'Phi-3', 'SOTA'],
+    badge: '🏆 Top Quality'
   },
-  {
-    id: 'Xenova/flan-t5-base',
-    name: 'Flan-T5 Base',
-    family: 'T5',
-    category: 'small',
-    sizeMB: 450,
-    description: 'Google Flan-T5 Base — instruction-tuned text-to-text model. Excellent at summarization and Q&A.',
-    tags: ['Google', 'T5', 'Summarization'],
-    badge: '📝 Summarizer'
-  },
+
   // ── Large (2GB+) ──────────────────────────────────────────────────────────
   {
     id: 'Xenova/LLaMA-3.2-3B-Instruct',
@@ -234,17 +170,8 @@ const LOCAL_MODEL_LIBRARY: LocalModelInfo[] = [
     tags: ['Meta', 'LLaMA 3', 'SOTA'],
     badge: '💎 Premium'
   },
-  {
-    id: 'Xenova/LLaMA-3.2-1B-Instruct',
-    name: 'LLaMA 3.2 1B Instruct',
-    family: 'LLaMA',
-    category: 'small',
-    sizeMB: 1000,
-    description: 'Meta LLaMA 3.2 1B — latest generation LLaMA. Dramatically improved reasoning and instruction following.',
-    tags: ['Meta', 'LLaMA 3', 'Instruct'],
-    badge: '🆕 Latest LLaMA'
-  },
-  // ── New additions ────────────────────────────────────────────────────────
+
+  // ── Code Specific Models ──────────────────────────────────────────────────
   {
     id: 'onnx-community/Qwen2.5-Coder-0.5B-Instruct',
     name: 'Qwen2.5 Coder 0.5B',
@@ -274,16 +201,6 @@ const LOCAL_MODEL_LIBRARY: LocalModelInfo[] = [
     description: 'Alibaba Qwen2.5 Coder 3B — powerful code model with deep reasoning and multi-language support.',
     tags: ['Qwen', 'Code', 'Multi-language'],
     badge: '💎 Top Code Model'
-  },
-  {
-    id: 'microsoft/Phi-3.5-mini-instruct',
-    name: 'Phi-3.5 Mini Instruct',
-    family: 'Phi',
-    category: 'medium',
-    sizeMB: 3600,
-    description: 'Microsoft Phi-3.5 Mini 3.8B — latest Phi model with improved multilingual support and reasoning.',
-    tags: ['Microsoft', 'Phi-3.5', 'Instruct'],
-    badge: '🆕 Latest Phi'
   },
 ];
 

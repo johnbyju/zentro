@@ -878,7 +878,6 @@ ${activeHtml}
               <option value="Xenova/Phi-3-mini-4k-instruct">Phi-3 Mini 4K 🏆 (~2.3GB)</option>
               <option value="onnx-community/Qwen2.5-Coder-1.5B-Instruct">Qwen2.5 Coder 1.5B 💻 (~1.6GB)</option>
               <option value="onnx-community/Qwen2.5-Coder-3B-Instruct">Qwen2.5 Coder 3B 💎 (~2.4GB)</option>
-              <option value="Xenova/bloom-560m">BLOOM 560M 🌍 (~560MB)</option>
               <option value="Xenova/LaMini-GPT-124M">LaMini GPT 124M ⚡ Fastest (~250MB)</option>
             </select>
           )}
